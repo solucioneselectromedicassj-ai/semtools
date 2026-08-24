@@ -3,9 +3,9 @@ import ReactDOM from "react-dom/client";
 
 // ─── Tokens ───────────────────────────────────────────────────────────────────
 const C = {
-  bg:"#0C0E14", surf:"#13161F", surf2:"#1C2030", bord:"#252A3D",
-  amber:"#E8A020", blue:"#38BDF8", green:"#34D399", red:"#F87171",
-  yellow:"#FFE566", text:"#C8D3E0", dim:"#4A5568",
+  bg:"#EEF1F8", surf:"#FFFFFF", surf2:"#E4E9F5", bord:"#C4CCE6",
+  amber:"#C07800", blue:"#1A7FC2", green:"#16865A", red:"#D63030",
+  yellow:"#8A6500", text:"#1A2038", dim:"#5E70A8",
 };
 const MONO = "'JetBrains Mono','Courier New',monospace";
 const UI   = "-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif";
@@ -729,7 +729,7 @@ function Home({ onSel }) {
         {ALL_TOOLS.map(c => (
           <div key={c.id} style={S.card} onClick={() => onSel(c.id)}>
             <div style={{ fontSize:24 }}>{c.icon}</div>
-            <div style={{ fontFamily:MONO, fontSize:12, fontWeight:700, color:"#EDEFFF" }}>{c.t}</div>
+            <div style={{ fontFamily:MONO, fontSize:12, fontWeight:700, color:C.text }}>{c.t}</div>
             <div style={{ fontSize:10, color:C.dim, lineHeight:1.4 }}>{c.s}</div>
           </div>
         ))}
