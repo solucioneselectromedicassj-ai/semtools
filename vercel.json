@@ -1,0 +1,5 @@
+{
+  "installCommand": "npm install && node node_modules/esbuild/install.js",
+  "buildCommand": "npm run build",
+  "outputDirectory": "dist"
+}
