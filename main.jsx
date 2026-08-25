@@ -152,7 +152,7 @@ function CameraView({ captureLabel="📷 Capturar", onCapture }) {
     if(!tkRef.current) return;
     const n=!torch;
     try{ await tkRef.current.applyConstraints({advanced:[{torch:n}]}); setTorch(n); }
-    catch(){ setErr("Torch no disponible"); }
+    catch(_e){ setErr("Torch no disponible"); }
   };
 
   const capture=()=>{
