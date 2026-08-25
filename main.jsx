@@ -28,7 +28,12 @@ const TOOL = {
   resistencias: { icon:"🔴", label:"Resistencias",    sub:"Cámara + IA → valor Ω",               col:C.violet },
   integrados:   { icon:"◻",  label:"Integrados IC",   sub:"Cámara + IA → ID + cómo probarlo",    col:C.violet },
   distancia:    { icon:"📏", label:"Distancia",       sub:"IA o medición por toque",              col:C.violet },
-  jack:         { icon:"🔌", label:"Sensores Jack",   sub:"Temperatura · Flujo · Voltaje · Luz",  col:C.orange },
+  jack_thermo:  { icon:"🌡",  label:"Temperatura",    sub:"NTC · °C en tiempo real",               col:C.orange },
+  jack_thermo2: { icon:"🌡🌡",label:"Dual Temp",       sub:"2 sondas NTC · diferencial",            col:C.red    },
+  jack_air:     { icon:"💨", label:"Flujo de aire",    sub:"Anemómetro térmico · m/s",              col:C.blue   },
+  jack_volt:    { icon:"⚡", label:"Voltaje CC",       sub:"Divisor 27kΩ · 0–30V",                  col:C.amber  },
+  jack_light:   { icon:"☀️", label:"Luminosidad",      sub:"LDR · lux aproximado",                  col:C.violet },
+  jack_raw:     { icon:"〜", label:"Señal cruda",      sub:"Voltaje de audio del jack · mV",        col:C.green  },
   tacometro:    { icon:"⚙️", label:"Tacómetro",       sub:"Módulo externo próximamente",          col:C.green  },
   red:          { icon:"📶", label:"Red / Internet",  sub:"Velocidad · Ping · Tipo de conexión",  col:C.blue   },
   modulos:      { icon:"📦", label:"Módulos",         sub:"Hardware externo · Catálogo y precios", col:C.green  },
@@ -37,7 +42,7 @@ const TOOL = {
 const BLOCKS = [
   { id:"celular",  icon:"📱", label:"CELULAR",     col:C.cyan,   tools:["decibeles","nivel","brujula","oscilo"] },
   { id:"camara",   icon:"📷", label:"CÁMARA + IA", col:C.violet, tools:["resistencias","integrados","distancia"] },
-  { id:"jack",     icon:"🔌", label:"JACK 3.5mm",  col:C.orange, tools:["jack"] },
+  { id:"jack",     icon:"🔌", label:"JACK 3.5mm",  col:C.orange, tools:["jack_thermo","jack_thermo2","jack_air","jack_volt","jack_light","jack_raw"] },
   { id:"celularplus", icon:"📶", label:"CONECTIVIDAD", col:C.blue, tools:["red"] },
   { id:"modulos",  icon:"📡", label:"MÓDULOS",     col:C.green,  tools:["tacometro","modulos"] },
 ];
@@ -245,7 +250,7 @@ function DevicePanel({ info, onClose }) {
   ];
 
   return (
-    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.85)",
+    <div style={{ position:"fixed", inset:0, background:"linear-gradient(170deg,#0D1829EE 0%,#152240F5 100%)",
                   backdropFilter:"blur(8px)", zIndex:100, overflowY:"auto",
                   display:"flex", flexDirection:"column" }}>
       <div style={{ padding:"14px 14px 20px", display:"flex", flexDirection:"column", gap:14 }}>
@@ -501,60 +506,56 @@ function ToolDistancia() {
 }
 
 
-// ── Sensores Jack — dual temperatura incluida ─────────────────────────────────
-const JACK_MODS=[
-  {id:"thermo",  label:"Temperatura",  unit:"°C",  icon:"🌡", convert:v=>v*100-40,              col:C.red,    mono:true},
-  {id:"thermo2", label:"Dual Temp",    unit:"°C",  icon:"🌡🌡",convert:v=>v*100-40,             col:C.violet, mono:false},
-  {id:"air",     label:"Flujo aire",   unit:"m/s", icon:"💨", convert:v=>Math.sqrt(Math.max(0,v)*8), col:C.blue, mono:true},
-  {id:"volt",    label:"Voltaje CC",   unit:"V",   icon:"⚡", convert:v=>v*30,                  col:C.amber,  mono:true},
-  {id:"light",   label:"Luminosidad",  unit:"lux", icon:"☀️", convert:v=>v**2.5*100,            col:C.violet, mono:true},
-  {id:"raw",     label:"Señal cruda",  unit:"mV",  icon:"〜", convert:v=>v*1000,               col:C.green,  mono:true},
-];
+// ── Sensores Jack — herramientas individuales ────────────────────────────────
+const JACK_MODS = {
+  jack_thermo:  { label:"Temperatura",   unit:"°C",  icon:"🌡",  col:"#FF3355", convert:v=>v*100-40,           stereo:false },
+  jack_thermo2: { label:"Dual Temp",     unit:"°C",  icon:"🌡🌡",col:"#B06EFF", convert:v=>v*100-40,           stereo:true  },
+  jack_air:     { label:"Flujo de aire", unit:"m/s", icon:"💨",  col:"#4D9EFF", convert:v=>Math.sqrt(Math.max(0,v)*8), stereo:false },
+  jack_volt:    { label:"Voltaje CC",    unit:"V",   icon:"⚡",  col:"#FFB830", convert:v=>v*30,               stereo:false },
+  jack_light:   { label:"Luminosidad",   unit:"lux", icon:"☀️",  col:"#B06EFF", convert:v=>Math.pow(Math.max(0,v)*10,2.5), stereo:false },
+  jack_raw:     { label:"Señal cruda",   unit:"mV",  icon:"〜",  col:"#00EF88", convert:v=>v*1000,            stereo:false },
+};
 
-function ToolJack() {
-  const col=C.orange;
-  const [on,setOn]=useState(false), [mod,setMod]=useState("thermo");
-  const [val,setVal]=useState(null), [val2,setVal2]=useState(null);
-  const [peak,setPeak]=useState(null), [minV,setMin]=useState(null);
-  const [err,setErr]=useState(null);
-  const anlRef=useRef(),rafRef=useRef(),stRef=useRef(),canRef=useRef();
-  const m=JACK_MODS.find(x=>x.id===mod);
+function ToolJackSensor({ modId }) {
+  const m = JACK_MODS[modId];
+  const col = m.col;
+  const [on,setOn]=useState(false), [val,setVal]=useState(null), [val2,setVal2]=useState(null);
+  const [peak,setPeak]=useState(null), [minV,setMin]=useState(null), [err,setErr]=useState(null);
+  const anlRef=useRef(null), rafRef=useRef(), stRef=useRef(), canRef=useRef();
 
-  const start=async()=>{
-    try{
-      const s=await navigator.mediaDevices.getUserMedia({
-        audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:false,channelCount:2}
+  const start = async () => {
+    try {
+      const s = await navigator.mediaDevices.getUserMedia({
+        audio:{ echoCancellation:false, noiseSuppression:false, autoGainControl:false, channelCount:2 }
       });
-      stRef.current=s;
-      const actx=new AudioContext(), src=actx.createMediaStreamSource(s);
-      const splitter=actx.createChannelSplitter(2);
-      src.connect(splitter);
-      const anlL=actx.createAnalyser(); anlL.fftSize=1024;
-      const anlR=actx.createAnalyser(); anlR.fftSize=1024;
-      splitter.connect(anlL,0); splitter.connect(anlR,1);
-      anlRef.current={L:anlL,R:anlR};
+      stRef.current = s;
+      const actx = new AudioContext(), src2 = actx.createMediaStreamSource(s);
+      const splitter = actx.createChannelSplitter(2);
+      src2.connect(splitter);
+      const anlL = actx.createAnalyser(); anlL.fftSize = 1024;
+      const anlR = actx.createAnalyser(); anlR.fftSize = 1024;
+      splitter.connect(anlL, 0); splitter.connect(anlR, 1);
+      anlRef.current = { L:anlL, R:anlR };
       setOn(true); setErr(null);
-      const td=new Float32Array(anlL.fftSize), td2=new Float32Array(anlR.fftSize);
-      const draw=()=>{
+      const td = new Float32Array(anlL.fftSize), td2 = new Float32Array(anlR.fftSize);
+      const draw = () => {
         anlL.getFloatTimeDomainData(td);
         let rms=0; for(let i=0;i<td.length;i++) rms+=td[i]*td[i];
         rms=Math.sqrt(rms/td.length);
-        const v=m.convert(rms);
+        const v = m.convert(rms);
         setVal(v); setPeak(p=>p===null||v>p?v:p); setMin(n=>n===null||v<n?v:n);
-        // Canal R (sonda 2 — solo para dual temp)
-        if(mod==="thermo2"){
+        if(m.stereo) {
           anlR.getFloatTimeDomainData(td2);
           let rms2=0; for(let i=0;i<td2.length;i++) rms2+=td2[i]*td2[i];
-          rms2=Math.sqrt(rms2/td2.length);
-          setVal2(m.convert(rms2));
+          setVal2(m.convert(Math.sqrt(rms2/td2.length)));
         }
-        // Waveform canvas
-        const c=canRef.current; if(c){
+        const c = canRef.current;
+        if(c) {
           const cx=c.getContext("2d"),W=c.width,H=c.height;
           cx.fillStyle="rgba(0,0,0,0.75)"; cx.fillRect(0,0,W,H);
           cx.strokeStyle="rgba(255,255,255,0.06)"; cx.lineWidth=1;
           for(let i=1;i<4;i++){cx.beginPath();cx.moveTo(0,H*i/4);cx.lineTo(W,H*i/4);cx.stroke();}
-          cx.strokeStyle=m.col; cx.lineWidth=2; cx.beginPath();
+          cx.strokeStyle=col; cx.lineWidth=2; cx.beginPath();
           const sw=W/td.length;
           for(let i=0;i<td.length;i++){const y=(1-td[i])*H/2;i===0?cx.moveTo(0,y):cx.lineTo(i*sw,y);}
           cx.stroke();
@@ -562,78 +563,92 @@ function ToolJack() {
         rafRef.current=requestAnimationFrame(draw);
       };
       rafRef.current=requestAnimationFrame(draw);
-    } catch(e){ setErr("Sin acceso jack: "+e.message); }
+    } catch(e){ setErr("Sin acceso al jack: "+e.message); }
   };
 
-  const stop=()=>{ cancelAnimationFrame(rafRef.current); stRef.current?.getTracks().forEach(t=>t.stop()); setOn(false); setVal(null); setVal2(null); };
+  const stop = () => {
+    cancelAnimationFrame(rafRef.current);
+    stRef.current?.getTracks().forEach(t=>t.stop());
+    setOn(false); setVal(null); setVal2(null);
+  };
   useEffect(()=>()=>{ cancelAnimationFrame(rafRef.current); stRef.current?.getTracks().forEach(t=>t.stop()); },[]);
 
-  const fmt=v=>{ if(v===null||isNaN(v)) return "---"; return Math.abs(v)<10?v.toFixed(2):Math.abs(v)<100?v.toFixed(1):Math.round(v).toString(); };
+  const fmt = v => {
+    if(v===null||isNaN(v)) return "---";
+    return Math.abs(v)<10?v.toFixed(2):Math.abs(v)<100?v.toFixed(1):Math.round(v).toString();
+  };
 
   return (
     <div style={S.wrap}>
-      <div style={S.st(col)}>▸ Módulos Analógicos Jack 3.5mm</div>
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:6}}>
-        {JACK_MODS.map(x=>(
-          <button key={x.id} style={{border:mod===x.id?`2px solid ${x.col}`:`1px solid ${C.bord}`,
-            borderRadius:10,padding:"9px 4px",background:mod===x.id?`rgba(${rgb(x.col)},0.12)`:"rgba(255,255,255,0.04)",
-            cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:3,
-            boxShadow:mod===x.id?glow(x.col,0.2):"none"}} onClick={()=>{setMod(x.id);setPeak(null);setMin(null);setVal2(null);}}>
-            <span style={{fontSize:mod===x.id?22:18}}>{x.icon}</span>
-            <span style={{fontFamily:MONO,fontSize:8,color:mod===x.id?x.col:C.dim,fontWeight:700,textAlign:"center"}}>{x.label}</span>
-          </button>
-        ))}
-      </div>
+      <div style={S.st(col)}>▸ {m.icon} {m.label}</div>
 
       {/* Display principal */}
-      {mod !== "thermo2" ? (
-        <div style={{...S.disp(m.col),display:"flex",alignItems:"baseline",gap:4}}>
-          <span style={S.dval(m.col)}>{fmt(val)}</span>
-          <span style={S.dunt}>{m.unit}</span>
-          <div style={{flex:1}}/><div style={S.dlbl}>{m.icon} {m.label.toUpperCase()}</div>
+      {!m.stereo ? (
+        <div style={{ ...S.disp(col), display:"flex", flexDirection:"column", alignItems:"center",
+                      justifyContent:"center", padding:"28px 18px", minHeight:140 }}>
+          <div style={{ fontFamily:MONO, fontSize:64, fontWeight:700, color:col, lineHeight:1,
+                        textShadow:`0 0 30px ${col}` }}>{fmt(val)}</div>
+          <div style={{ fontFamily:MONO, fontSize:16, color:`rgba(${rgb(col)},0.7)`, marginTop:6 }}>{m.unit}</div>
+          <div style={S.dlbl}>{m.label.toUpperCase()}</div>
         </div>
       ) : (
-        <div style={S.row}>
-          <div style={{...S.disp(C.red),flex:1,textAlign:"center"}}>
-            <div style={{fontFamily:MONO,fontSize:9,color:C.dim}}>SONDA 1 (L)</div>
-            <div style={{fontFamily:MONO,fontSize:30,fontWeight:700,color:C.red,textShadow:`0 0 14px ${C.red}`}}>{fmt(val)}°C</div>
+        <>
+          <div style={S.row}>
+            <div style={{ ...S.disp("#FF3355"), flex:1, textAlign:"center", padding:"16px 8px" }}>
+              <div style={{ fontFamily:MONO, fontSize:9, color:C.dim }}>SONDA 1 (L)</div>
+              <div style={{ fontFamily:MONO, fontSize:38, fontWeight:700, color:"#FF3355",
+                            textShadow:"0 0 20px #FF3355" }}>{fmt(val)}</div>
+              <div style={{ fontFamily:MONO, fontSize:12, color:C.dim }}>°C</div>
+            </div>
+            <div style={{ ...S.disp(col), flex:1, textAlign:"center", padding:"16px 8px" }}>
+              <div style={{ fontFamily:MONO, fontSize:9, color:C.dim }}>SONDA 2 (R)</div>
+              <div style={{ fontFamily:MONO, fontSize:38, fontWeight:700, color:col,
+                            textShadow:`0 0 20px ${col}` }}>{fmt(val2)}</div>
+              <div style={{ fontFamily:MONO, fontSize:12, color:C.dim }}>°C</div>
+            </div>
           </div>
-          <div style={{...S.disp(C.violet),flex:1,textAlign:"center"}}>
-            <div style={{fontFamily:MONO,fontSize:9,color:C.dim}}>SONDA 2 (R)</div>
-            <div style={{fontFamily:MONO,fontSize:30,fontWeight:700,color:C.violet,textShadow:`0 0 14px ${C.violet}`}}>{fmt(val2)}°C</div>
-          </div>
-        </div>
+          {val!==null && val2!==null && (
+            <div style={{ ...S.disp(C.amber), textAlign:"center", padding:"10px 16px" }}>
+              <div style={{ fontFamily:MONO, fontSize:9, color:C.dim }}>DIFERENCIA</div>
+              <div style={{ fontFamily:MONO, fontSize:28, fontWeight:700, color:C.amber,
+                            textShadow:`0 0 16px ${C.amber}` }}>
+                {Math.abs(parseFloat(fmt(val))-parseFloat(fmt(val2))).toFixed(1)} °C
+              </div>
+            </div>
+          )}
+        </>
       )}
-      {mod === "thermo2" && val !== null && val2 !== null && (
-        <div style={{...S.disp(C.amber),textAlign:"center",padding:"10px 16px"}}>
-          <div style={{fontFamily:MONO,fontSize:9,color:C.dim}}>DIFERENCIA</div>
-          <div style={{fontFamily:MONO,fontSize:24,fontWeight:700,color:C.amber,textShadow:`0 0 12px ${C.amber}`}}>
-            {Math.abs(parseFloat(fmt(val))-parseFloat(fmt(val2))).toFixed(1)} °C
+
+      {/* Forma de onda */}
+      <canvas ref={canRef} width={640} height={80}
+        style={{ width:"100%", borderRadius:8, border:`1px solid rgba(${rgb(col)},0.2)`,
+                 background:"rgba(0,0,0,0.7)" }}/>
+
+      {/* Min/Max */}
+      {(peak!==null||minV!==null) && (
+        <div style={S.row}>
+          <div style={{ ...S.disp(C.blue), flex:1, textAlign:"center", padding:"10px 8px" }}>
+            <div style={{ fontFamily:MONO, fontSize:9, color:C.dim }}>MÍN</div>
+            <div style={{ fontFamily:MONO, fontSize:24, fontWeight:700, color:C.blue,
+                          textShadow:`0 0 12px ${C.blue}` }}>{fmt(minV)} {m.unit}</div>
           </div>
+          <div style={{ ...S.disp(C.red), flex:1, textAlign:"center", padding:"10px 8px" }}>
+            <div style={{ fontFamily:MONO, fontSize:9, color:C.dim }}>MÁX</div>
+            <div style={{ fontFamily:MONO, fontSize:24, fontWeight:700, color:C.red,
+                          textShadow:`0 0 12px ${C.red}` }}>{fmt(peak)} {m.unit}</div>
+          </div>
+          <button style={{ ...S.btn("s"), flex:.45, padding:"8px 4px", fontSize:11 }}
+            onClick={()=>{setPeak(null);setMin(null);}}>Reset</button>
         </div>
       )}
 
-      <canvas ref={canRef} width={640} height={90}
-        style={{width:"100%",borderRadius:8,border:`1px solid rgba(${rgb(m.col)},0.2)`,background:"rgba(0,0,0,0.7)"}}/>
-
-      {(peak!==null||minV!==null)&&(
-        <div style={S.row}>
-          <div style={{...S.disp(C.blue),flex:1,textAlign:"center",padding:"10px 8px"}}>
-            <div style={{fontFamily:MONO,fontSize:9,color:C.dim}}>MÍN</div>
-            <div style={{fontFamily:MONO,fontSize:24,fontWeight:700,color:C.blue,textShadow:`0 0 12px ${C.blue}`}}>{fmt(minV)}</div>
-          </div>
-          <div style={{...S.disp(C.red),flex:1,textAlign:"center",padding:"10px 8px"}}>
-            <div style={{fontFamily:MONO,fontSize:9,color:C.dim}}>MÁX</div>
-            <div style={{fontFamily:MONO,fontSize:24,fontWeight:700,color:C.red,textShadow:`0 0 12px ${C.red}`}}>{fmt(peak)}</div>
-          </div>
-          <button style={{...S.btn("s"),flex:.5,padding:"8px 4px",fontSize:11}} onClick={()=>{setPeak(null);setMin(null);}}>Reset</button>
-        </div>
-      )}
-      {err&&<div style={{color:C.amber,fontFamily:MONO,fontSize:10,lineHeight:1.6}}>{err}</div>}
-      {!on?<button style={S.btn("p",col)} onClick={start}>Conectar sensor Jack</button>
-          :<button style={S.btn("r")} onClick={stop}>Desconectar</button>}
-      {mod==="thermo2"&&<div style={S.note}>Dual Temp: conectá sonda 1 al canal L y sonda 2 al canal R del jack estéreo (TRRS). Usá un adaptador Y si es necesario.</div>}
-      {mod!=="thermo2"&&<div style={S.note}>Ver manual de sensores para construir ThermoJack, AirJack, VoltJack o PhotoJack.</div>}
+      {err && <div style={{ color:C.amber, fontFamily:MONO, fontSize:10, lineHeight:1.6 }}>{err}</div>}
+      {!on
+        ? <button style={S.btn("p", col)} onClick={start}>Conectar {m.icon} {m.label}</button>
+        : <button style={S.btn("r")} onClick={stop}>Desconectar</button>
+      }
+      {m.stereo && <div style={S.note}>Conectá sonda 1 al canal L y sonda 2 al canal R del jack estéreo TRRS.</div>}
+      {!m.stereo && <div style={S.note}>Conectá el sensor al jack 3.5mm. Ver manual para construir {m.label === "Temperatura" ? "ThermoJack" : m.icon+" módulo"}.</div>}
     </div>
   );
 }
@@ -750,67 +765,91 @@ function ToolNivel() {
   const col=C.cyan;
   const [model,setModel]=useState("bubble");
   const [ang,setAng]=useState({b:0,g:0}), [on,setOn]=useState(false), [err,setErr]=useState(null);
-  const hRef=useRef(null), needsPermission=typeof DeviceOrientationEvent?.requestPermission==="function";
+  const [hasData,setHasData]=useState(false);
+  const hRef=useRef(null);
 
-  const startListener=()=>{
-    const h=e=>setAng({b:e.beta||0,g:e.gamma||0});
-    hRef.current=h; window.addEventListener("deviceorientation",h,true); setOn(true); setErr(null);
+  const startMotion = () => {
+    // Usar DeviceMotionEvent (acelerómetro) — más confiable que orientation
+    const h = e => {
+      const ax = e.accelerationIncludingGravity?.x || 0;
+      const ay = e.accelerationIncludingGravity?.y || 0;
+      const az = e.accelerationIncludingGravity?.z || -9.8;
+      const g2 = Math.sqrt(ax*ax+ay*ay+az*az)||9.8;
+      const gamma = Math.asin(Math.max(-1,Math.min(1,ax/g2)))*180/Math.PI;
+      const beta  = Math.asin(Math.max(-1,Math.min(1,-ay/g2)))*180/Math.PI;
+      setAng({b:beta, g:gamma}); setHasData(true);
+    };
+    hRef.current = h;
+    window.addEventListener("devicemotion", h, true);
+    setOn(true); setErr(null);
+    setTimeout(()=>setHasData(d=>{ if(!d) setErr("Sin datos del acelerómetro — verifica permisos en el sistema"); return d; }), 3000);
   };
 
-  const start=async()=>{
-    if(needsPermission){
-      try{ const p=await DeviceOrientationEvent.requestPermission(); if(p!=="granted"){setErr("Permiso denegado");return;} }
+  const start = async () => {
+    if(typeof DeviceMotionEvent?.requestPermission==="function"){
+      try{ const p=await DeviceMotionEvent.requestPermission(); if(p!=="granted"){setErr("Permiso denegado");return;} }
       catch(e){ setErr(e.message); return; }
     }
-    startListener();
+    startMotion();
   };
 
-  const stop=()=>{ if(hRef.current) window.removeEventListener("deviceorientation",hRef.current,true); setOn(false); setAng({b:0,g:0}); };
+  const stop = () => {
+    if(hRef.current) window.removeEventListener("devicemotion",hRef.current,true);
+    setOn(false); setAng({b:0,g:0}); setHasData(false);
+  };
 
-  // Android: auto-start
+  // Android auto-start
   useEffect(()=>{
-    if(!needsPermission){ startListener(); return ()=>{ if(hRef.current) window.removeEventListener("deviceorientation",hRef.current,true); }; }
+    if(typeof DeviceMotionEvent?.requestPermission!=="function"){ startMotion(); }
+    return ()=>{ if(hRef.current) window.removeEventListener("devicemotion",hRef.current,true); };
   },[]);
 
   const gx=ang.g, gy=ang.b;
-  const bx=Math.max(-38,Math.min(38,-gx*1.4)), by=Math.max(-38,Math.min(38,-gy*1.4));
+  const bx=Math.max(-38,Math.min(38,-gx*1.4));
+  const by=Math.max(-38,Math.min(38,-gy*1.4));
   const flat=Math.abs(gx)<1.5&&Math.abs(gy)<1.5;
 
   return (
     <div style={S.wrap}>
       <div style={S.st(col)}>▸ Nivel Digital</div>
       <div style={S.row}>
-        {[["bubble","🔵 Burbuja"],["horizon","📐 Horizonte"]].map(([m,l])=>(
-          <button key={m} style={{...S.btn(model===m?"p":"s",col),flex:1,fontSize:11}} onClick={()=>setModel(m)}>{l}</button>
+        {[["bubble","🔵 Burbuja"],["horizon","📐 Horizonte"]].map(([md,l])=>(
+          <button key={md} style={{...S.btn(model===md?"p":"s",col),flex:1,fontSize:11}}
+            onClick={()=>setModel(md)}>{l}</button>
         ))}
       </div>
-      {model==="bubble"&&(
-        <div style={{...S.disp(col),display:"flex",justifyContent:"center",padding:24}}>
-          <div style={{position:"relative",width:200,height:200}}>
+
+      {model==="bubble" && (
+        <div style={{...S.disp(col),display:"flex",justifyContent:"center",padding:20,minHeight:210}}>
+          <div style={{position:"relative",width:190,height:190}}>
             <div style={{position:"absolute",inset:0,borderRadius:"50%",border:`2px solid rgba(${rgb(col)},0.3)`,background:"rgba(0,0,0,0.8)"}}/>
-            <div style={{position:"absolute",inset:20,borderRadius:"50%",border:`1px solid rgba(${rgb(col)},0.15)`}}/>
-            <div style={{position:"absolute",inset:40,borderRadius:"50%",border:`1px solid rgba(${rgb(col)},0.1)`}}/>
+            <div style={{position:"absolute",inset:22,borderRadius:"50%",border:`1px solid rgba(${rgb(col)},0.15)`}}/>
+            <div style={{position:"absolute",inset:44,borderRadius:"50%",border:`1px solid rgba(${rgb(col)},0.1)`}}/>
             <div style={{position:"absolute",top:"50%",left:10,right:10,height:1,background:`rgba(${rgb(col)},0.15)`,transform:"translateY(-50%)"}}/>
             <div style={{position:"absolute",left:"50%",top:10,bottom:10,width:1,background:`rgba(${rgb(col)},0.15)`,transform:"translateX(-50%)"}}/>
-            <div style={{position:"absolute",top:"50%",left:"50%",width:22,height:22,marginTop:-11,marginLeft:-11,
+            <div style={{position:"absolute",top:"50%",left:"50%",width:20,height:20,marginTop:-10,marginLeft:-10,
               borderRadius:"50%",border:`1.5px solid rgba(${rgb(col)},${flat?.7:.2})`,transition:"border-color .3s"}}/>
-            <div style={{position:"absolute",top:"50%",left:"50%",width:34,height:34,marginTop:-17,marginLeft:-17,
+            <div style={{position:"absolute",top:"50%",left:"50%",width:36,height:36,marginTop:-18,marginLeft:-18,
               transform:`translate(${bx}px,${by}px)`,borderRadius:"50%",transition:"transform .08s ease-out",
               background:flat?`radial-gradient(circle at 35% 35%,${col}CC,${col}55)`:`radial-gradient(circle at 35% 35%,${C.blue}CC,${C.blue}44)`,
-              border:`2px solid ${flat?col:C.blue}`,boxShadow:flat?`0 0 20px ${col}88`:`0 0 10px ${C.blue}55`}}/>
+              border:`2px solid ${flat?col:C.blue}`,
+              boxShadow:flat?`0 0 22px ${col}`:` 0 0 12px ${C.blue}55`}}/>
           </div>
         </div>
       )}
-      {model==="horizon"&&(
-        <div style={{...S.disp(col),display:"flex",justifyContent:"center",alignItems:"center",minHeight:160,position:"relative",overflow:"hidden"}}>
+
+      {model==="horizon" && (
+        <div style={{...S.disp(col),display:"flex",justifyContent:"center",alignItems:"center",
+          minHeight:140,position:"relative",overflow:"hidden"}}>
           <div style={{position:"absolute",inset:0,display:"flex",flexDirection:"column"}}>
-            <div style={{flex:1,background:"rgba(14,165,233,0.08)"}}/>
-            <div style={{flex:1,background:"rgba(0,239,136,0.05)"}}/>
+            <div style={{flex:1,background:"rgba(14,165,233,0.06)"}}/>
+            <div style={{flex:1,background:"rgba(0,239,136,0.04)"}}/>
           </div>
           <div style={{position:"relative",width:"88%",zIndex:2}}>
-            <div style={{height:3,borderRadius:3,background:flat?col:C.amber,
+            <div style={{height:3,borderRadius:3,
+              background:flat?col:C.amber,
               transform:`rotate(${gx}deg)`,transition:"transform .06s ease-out",
-              boxShadow:flat?`0 0 16px ${col}`:` 0 0 10px ${C.amber}`}}/>
+              boxShadow:flat?`0 0 16px ${col}`:`0 0 10px ${C.amber}`}}/>
           </div>
           <div style={{position:"absolute",bottom:10,left:"50%",transform:"translateX(-50%)",
             fontFamily:MONO,fontSize:12,color:flat?col:C.amber,fontWeight:700,textShadow:`0 0 8px ${flat?col:C.amber}`}}>
@@ -818,21 +857,27 @@ function ToolNivel() {
           </div>
         </div>
       )}
+
       <div style={S.row}>
         <div style={{...S.disp(col),flex:1,textAlign:"center"}}>
-          <div style={{fontFamily:MONO,fontSize:26,fontWeight:700,color:col,textShadow:`0 0 14px ${col}`}}>{gx.toFixed(1)}°</div>
-          <div style={S.dlbl}>LATERAL (γ)</div>
+          <div style={{fontFamily:MONO,fontSize:28,fontWeight:700,color:col,textShadow:`0 0 14px ${col}`}}>{gx.toFixed(1)}°</div>
+          <div style={S.dlbl}>LATERAL</div>
         </div>
         <div style={{...S.disp(C.blue),flex:1,textAlign:"center"}}>
-          <div style={{fontFamily:MONO,fontSize:26,fontWeight:700,color:C.blue,textShadow:`0 0 14px ${C.blue}`}}>{gy.toFixed(1)}°</div>
-          <div style={S.dlbl}>INCLINACIÓN (β)</div>
+          <div style={{fontFamily:MONO,fontSize:28,fontWeight:700,color:C.blue,textShadow:`0 0 14px ${C.blue}`}}>{gy.toFixed(1)}°</div>
+          <div style={S.dlbl}>INCLINACIÓN</div>
         </div>
       </div>
-      {on&&<div style={S.tag(flat)}>{flat?"✓  NIVELADO  ±1.5°":"⊘  FUERA DE NIVEL"}</div>}
-      {err&&<div style={{color:C.red,fontFamily:MONO,fontSize:11,lineHeight:1.6}}>{err}</div>}
-      {needsPermission&&!on&&<button style={S.btn("p",col)} onClick={start}>Activar nivel</button>}
-      {on&&needsPermission&&<button style={S.btn("r")} onClick={stop}>Detener</button>}
-      <div style={S.note}>Apoyá el celular sobre la superficie a nivelar.</div>
+
+      {on&&hasData&&<div style={S.tag(flat)}>{flat?"✓  NIVELADO  ±1.5°":"⊘  FUERA DE NIVEL"}</div>}
+      {err&&<div style={{color:C.amber,fontFamily:MONO,fontSize:10,lineHeight:1.6}}>{err}</div>}
+      {typeof DeviceMotionEvent?.requestPermission==="function" && !on && (
+        <button style={S.btn("p",col)} onClick={start}>Activar nivel</button>
+      )}
+      {on && typeof DeviceMotionEvent?.requestPermission==="function" && (
+        <button style={S.btn("r")} onClick={stop}>Detener</button>
+      )}
+      <div style={S.note}>Apoyá el celular sobre la superficie. Usa el acelerómetro para mayor precisión.</div>
     </div>
   );
 }
@@ -1353,16 +1398,29 @@ function Home({onSel}) {
 }
 
 // ── App ───────────────────────────────────────────────────────────────────────
-const VIEWS = {
-  resistencias:<ToolResistencias/>, integrados:<ToolIntegrado/>, distancia:<ToolDistancia/>,
-  jack:<ToolJack/>, decibeles:<ToolDecibeles/>, nivel:<ToolNivel/>,
-  brujula:<ToolBrujula/>, oscilo:<ToolOscilo/>,
-  red:<ToolRed/>,
-  modulos:<ToolModulos/>,
-  tacometro:<ModulePlaceholder icon="⚙️" title="Tacómetro Estroboscópico"
-    why={"El efecto estroboscópico puede desencadenar convulsiones.\nRequiere módulo externo con LED controlado."}
-    when="LED IR + fotodetector vía USB-C · En desarrollo"/>,
-};
+function getView(tool) {
+  switch(tool) {
+    case "resistencias": return <ToolResistencias key={tool}/>;
+    case "integrados":   return <ToolIntegrado key={tool}/>;
+    case "distancia":    return <ToolDistancia key={tool}/>;
+    case "decibeles":    return <ToolDecibeles key={tool}/>;
+    case "nivel":        return <ToolNivel key={tool}/>;
+    case "brujula":      return <ToolBrujula key={tool}/>;
+    case "oscilo":       return <ToolOscilo key={tool}/>;
+    case "red":          return <ToolRed key={tool}/>;
+    case "modulos":      return <ToolModulos key={tool}/>;
+    case "jack_thermo":  return <ToolJackSensor key={tool} modId="jack_thermo"/>;
+    case "jack_thermo2": return <ToolJackSensor key={tool} modId="jack_thermo2"/>;
+    case "jack_air":     return <ToolJackSensor key={tool} modId="jack_air"/>;
+    case "jack_volt":    return <ToolJackSensor key={tool} modId="jack_volt"/>;
+    case "jack_light":   return <ToolJackSensor key={tool} modId="jack_light"/>;
+    case "jack_raw":     return <ToolJackSensor key={tool} modId="jack_raw"/>;
+    case "tacometro":    return <ModulePlaceholder key={tool} icon="⚙️" title="Tacómetro Estroboscópico"
+      why={"El efecto estroboscópico puede desencadenar convulsiones.\nRequiere módulo externo con LED controlado."}
+      when="LED IR + fotodetector vía USB-C · En desarrollo"/>;
+    default: return null;
+  }
+}
 
 function App() {
   const [tool,setTool]=useState(null);
@@ -1398,7 +1456,7 @@ function App() {
         </button>
       </div>
       <div style={S.body}>
-        {tool===null?<Home onSel={setTool}/>:VIEWS[tool]}
+        {tool===null?<Home onSel={setTool}/>:getView(tool)}
       </div>
       <div style={S.nav}>
         <button style={S.nb(tool===null,C.amber)} onClick={()=>setTool(null)}>
