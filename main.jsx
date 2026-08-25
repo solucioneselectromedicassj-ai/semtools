@@ -13,7 +13,7 @@ const glass = (h,a=0.06) => ({ background:`rgba(${rgb(h)},${a})`, backdropFilter
 
 // ── Tokens ────────────────────────────────────────────────────────────────────
 const C = {
-  bg:"#07090F", bord:"rgba(255,255,255,0.11)", text:"#DDE4FF", dim:"#4E6080",
+  bg:"#0D1829", bord:"rgba(255,255,255,0.12)", text:"#E2E8FF", dim:"#5A7099",
   cyan:"#00D9FF", orange:"#FF7A35", violet:"#B06EFF", green:"#00EF88",
   amber:"#FFB830", red:"#FF3355", blue:"#4D9EFF",
 };
@@ -44,7 +44,7 @@ const BLOCKS = [
 
 // ── Styles ────────────────────────────────────────────────────────────────────
 const S = {
-  app:  { display:"flex", flexDirection:"column", height:"100vh", background:C.bg, color:C.text,
+  app:  { display:"flex", flexDirection:"column", height:"100vh", background:"linear-gradient(170deg,#0D1829 0%,#152240 55%,#0F1A35 100%)", color:C.text,
           fontFamily:"-apple-system,'Segoe UI',sans-serif", overflow:"hidden" },
   hdr:  { padding:"10px 14px 9px", display:"flex", alignItems:"center", gap:10, minHeight:50,
           background:"rgba(7,9,15,0.96)", backdropFilter:"blur(20px)", borderBottom:`1px solid ${C.bord}` },
@@ -111,7 +111,7 @@ const S = {
 
 // ── Claude API ────────────────────────────────────────────────────────────────
 async function askClaude(b64, prompt) {
-  const r = await fetch("https://api.anthropic.com/v1/messages", {
+  const r = await fetch("/api/claude", {
     method:"POST", headers:{"Content-Type":"application/json"},
     body:JSON.stringify({ model:"claude-sonnet-4-6", max_tokens:1000,
       messages:[{ role:"user", content:[
@@ -1297,37 +1297,57 @@ function ModulePlaceholder({icon,title,why,when}) {
 
 // ── Home ──────────────────────────────────────────────────────────────────────
 function Home({onSel}) {
-  return (
-    <div style={{display:"flex",flexDirection:"column",gap:20,paddingBottom:8}}>
-      {BLOCKS.map(bl=>(
-        <div key={bl.id}>
-          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
-            <div style={{height:1,flex:1,background:`rgba(${rgb(bl.col)},0.25)`}}/>
-            <div style={{fontFamily:MONO,fontSize:9,color:bl.col,letterSpacing:2.5,fontWeight:700,
-              textShadow:`0 0 10px ${bl.col}88`}}>
-              {bl.icon} {bl.label}
-            </div>
-            <div style={{height:1,flex:1,background:`rgba(${rgb(bl.col)},0.25)`}}/>
-          </div>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-            {bl.tools.map(tid=>{
-              const t=TOOL[tid]; const disabled=tid==="tacometro";
-              return (
-                <div key={tid} style={{...S.card(t.col),opacity:disabled?.65:1}}
-                  onClick={()=>!disabled&&onSel(tid)}>
-                  <div style={{fontSize:28,filter:`drop-shadow(0 0 8px ${t.col}66)`}}>{t.icon}</div>
-                  <div>
-                    <div style={{fontFamily:MONO,fontSize:12,fontWeight:700,color:C.text,marginBottom:3}}>{t.label}</div>
-                    <div style={{fontSize:10,color:C.dim,lineHeight:1.45}}>{t.sub}</div>
-                    {disabled&&<div style={{marginTop:6}}><span style={S.pill(C.green)}>módulo</span></div>}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+  const [sector,setSector]=React.useState(null);
+  if(sector){
+    const bl=BLOCKS.find(b=>b.id===sector);
+    return (
+      <div style={S.wrap}>
+        <button style={{...S.btn("s"),display:"flex",alignItems:"center",gap:8,textAlign:"left"}}
+          onClick={()=>setSector(null)}>
+          <span>←</span> {bl.icon} {bl.label}
+        </button>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+          {bl.tools.map(tid=>{
+            const t=TOOL[tid]; const disabled=tid==="tacometro";
+            return (
+              <div key={tid} style={{...S.card(t.col),opacity:disabled?.6:1,flexDirection:"column",alignItems:"flex-start",minHeight:110}}
+                onClick={()=>!disabled&&onSel(tid)}>
+                <div style={{fontSize:32,filter:`drop-shadow(0 0 10px ${t.col}88)`,marginBottom:6}}>{t.icon}</div>
+                <div style={{fontFamily:MONO,fontSize:12,fontWeight:700,color:C.text,lineHeight:1.3,marginBottom:4}}>{t.label}</div>
+                <div style={{fontSize:10,color:C.dim,lineHeight:1.5}}>{t.sub}</div>
+                {disabled&&<div style={{marginTop:8}}><span style={S.pill(C.green)}>módulo</span></div>}
+              </div>
+            );
+          })}
         </div>
+      </div>
+    );
+  }
+  return (
+    <div style={{display:"flex",flexDirection:"column",gap:12,paddingBottom:8}}>
+      <div style={{fontFamily:MONO,fontSize:9,color:C.dim,letterSpacing:2,textAlign:"center",paddingBottom:4}}>SELECCIONÁ UN BLOQUE</div>
+      {BLOCKS.map(bl=>(
+        <button key={bl.id} style={{
+          border:`1px solid rgba(${rgb(bl.col)},0.3)`, borderLeft:`4px solid ${bl.col}`,
+          borderRadius:14, padding:"18px 20px",
+          background:`rgba(${rgb(bl.col)},0.07)`,
+          cursor:"pointer", display:"flex", alignItems:"center", gap:16,
+          boxShadow:`0 2px 20px rgba(0,0,0,0.3)`,
+          backdropFilter:"blur(10px)", textAlign:"left", width:"100%",
+        }} onClick={()=>setSector(bl.id)}>
+          <div style={{fontSize:36,filter:`drop-shadow(0 0 12px ${bl.col}99)`}}>{bl.icon}</div>
+          <div style={{flex:1}}>
+            <div style={{fontFamily:MONO,fontSize:14,fontWeight:700,color:bl.col,
+              textShadow:`0 0 14px ${bl.col}88`,letterSpacing:1,marginBottom:4}}>{bl.label}</div>
+            <div style={{fontFamily:MONO,fontSize:10,color:C.dim,lineHeight:1.6}}>
+              {bl.tools.map(tid=>TOOL[tid]?.icon).join("  ")}
+              {" · "}{bl.tools.length} herramienta{bl.tools.length>1?"s":""}
+            </div>
+          </div>
+          <div style={{fontFamily:MONO,fontSize:22,color:`rgba(${rgb(bl.col)},0.5)`}}>›</div>
+        </button>
       ))}
-      <div style={{fontFamily:MONO,fontSize:8,color:C.dim,textAlign:"center",letterSpacing:2,paddingTop:4}}>SEM TOOLS v2</div>
+      <div style={{fontFamily:MONO,fontSize:8,color:C.dim,textAlign:"center",letterSpacing:2,paddingTop:8}}>SEM TOOLS v2</div>
     </div>
   );
 }
