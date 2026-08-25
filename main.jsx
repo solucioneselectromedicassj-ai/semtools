@@ -895,22 +895,16 @@ function ToolBrujula() {
   };
 
   const startListener=()=>{
-    // Absolute heading: Android Chrome fires 'deviceorientationabsolute'
-    const h=e=>{
-      const heading=e.webkitCompassHeading!=null
-        ? e.webkitCompassHeading                  // iOS: true north
-        : e.absolute && e.alpha!=null
-          ? (360-e.alpha)%360                     // Android absolute: convert
-          : null;
-      if(heading!==null) setHdg(heading);
-    };
-    hRef.current=h;
-    window.addEventListener("deviceorientationabsolute",h,true);
-    window.addEventListener("deviceorientation",h,true);
+    let gotAbs=false;
+    const hAbs=e=>{ if(e.alpha==null) return; gotAbs=true; setHdg((360-e.alpha+360)%360); };
+    const hRel=e=>{ if(gotAbs) return; if(e.webkitCompassHeading!=null) setHdg(e.webkitCompassHeading); };
+    hRef.current={abs:hAbs,rel:hRel};
+    window.addEventListener("deviceorientationabsolute",hAbs,true);
+    window.addEventListener("deviceorientation",hRel,true);
     setOn(true); setErr(null);
+    setTimeout(()=>setHdg(p=>{ if(p===null) setErr("Sin datos — mové el celular en figura 8"); return p; }),5000);
   };
-
-  const start=async()=>{
+    const start=async()=>{
     if(needsPerm){
       try{ const p=await DeviceOrientationEvent.requestPermission(); if(p!=="granted"){setErr("Permiso denegado");return;} }
       catch(e){ setErr(e.message); return; }
@@ -920,8 +914,8 @@ function ToolBrujula() {
 
   const stop=()=>{
     if(hRef.current){
-      window.removeEventListener("deviceorientationabsolute",hRef.current,true);
-      window.removeEventListener("deviceorientation",hRef.current,true);
+      window.removeEventListener("deviceorientationabsolute",hRef.current?.abs||hRef.current,true);
+      window.removeEventListener("deviceorientation",hRef.current?.rel||hRef.current,true);
     }
     setOn(false); setHdg(null);
   };
