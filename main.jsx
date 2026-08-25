@@ -1,10 +1,10 @@
+import React, { useState, useEffect, useRef, useCallback } from "react";
+import ReactDOM from "react-dom/client";
+
 // ── Service Worker ──────────────────────────────────────────────────────────
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(() => {}));
 }
-
-import React, { useState, useEffect, useRef, useCallback } from "react";
-import ReactDOM from "react-dom/client";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 const rgb = hex => `${parseInt(hex.slice(1,3),16)},${parseInt(hex.slice(3,5),16)},${parseInt(hex.slice(5,7),16)}`;
@@ -192,7 +192,7 @@ async function getDeviceInfo() {
   const isAndroid = /Android/.test(ua);
   const isIOS = /iPhone|iPad|iPod/.test(ua);
   const modelRaw = isAndroid
-    ? (ua.match(/;\s*([^;)]+)\s+Build/)?.[1] || ua.match(/Android [^;]+;\s*([^)]+)\)/)?.[1] || "Android")
+    ? (ua.match(/Android ([^;]+); ([^)]+)/)?.[2] || "Android")
     : isIOS ? (ua.match(/(iPhone|iPad)/)?.[0] || "iOS") : "Desconocido";
   const model = modelRaw.trim().slice(0, 40);
   const osVer = isAndroid ? (ua.match(/Android\s([\d.]+)/)?.[1] || "?")
