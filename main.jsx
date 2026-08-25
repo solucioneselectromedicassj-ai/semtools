@@ -370,7 +370,12 @@ function ToolTacometro() {
       const track = stream.getVideoTracks()[0];
       tkRef.current = track;
       const caps = track.getCapabilities?.() || {};
-      if (!caps.torch && mode === "torch") { setMode("screen"); setErr("Torch no disponible, usando pantalla"); }
+      if (caps.torch) {
+        setMode("torch"); // auto-seleccionar torch si disponible
+      } else {
+        setMode("screen");
+        if (mode === "torch") setErr("Linterna no disponible en este dispositivo, usando pantalla");
+      }
     } catch(e) { setErr("Sin cámara: " + e.message); }
   };
 
@@ -407,6 +412,9 @@ function ToolTacometro() {
         <div style={{ position:"fixed", inset:0, background:"#FFFFFF", zIndex:9999, pointerEvents:"none" }} />
       )}
       <div style={S.st}>▸ Tacómetro Estroboscópico</div>
+      <div style={{ fontFamily:MONO, fontSize:10, color:C.dim, lineHeight:1.6, background:C.surf2, borderRadius:6, padding:"8px 12px", border:`1px solid ${C.bord}` }}>
+        💡 Cómo usar: ajustá la frecuencia hasta que la pieza giratoria <b>parezca quieta</b>. Ese Hz × 60 = RPM real.
+      </div>
       <div style={S.disp}>
         <div style={{ ...S.dval, fontSize:46 }}>{rpm}</div>
         <div style={{ fontFamily:MONO, fontSize:13, color:C.dim, marginTop:2 }}>RPM</div>
@@ -443,7 +451,12 @@ function ToolTacometro() {
         onClick={running ? stopStrobe : startStrobe}>
         {running ? "⏹ Detener" : "▶ Iniciar estroboscopio"}
       </button>
-      <div style={S.note}>Ajustá hasta que la pieza giratoria parezca congelada → ese Hz × 60 = RPM.</div>
+      <div style={S.note}>
+        {mode === "torch"
+          ? "Apuntá la linterna trasera a la pieza giratoria. Ajustá Hz hasta que parezca congelada → Hz × 60 = RPM."
+          : "Modo pantalla: apuntá la pantalla blanca parpadeante hacia la pieza. Mejor usar modo Linterna si el celular lo soporta."
+        }
+      </div>
     </div>
   );
 }
@@ -625,8 +638,8 @@ function ToolNivel() {
   useEffect(() => () => { if (hRef.current) window.removeEventListener("deviceorientation", hRef.current); }, []);
 
   const gx = ang.g, gy = ang.b;
-  const bx = Math.max(-38, Math.min(38, gx * 1.4));
-  const by = Math.max(-38, Math.min(38, gy * 1.4));
+  const bx = Math.max(-38, Math.min(38, -gx * 1.4));
+  const by = Math.max(-38, Math.min(38, -gy * 1.4));
   const flat = Math.abs(gx) < 2 && Math.abs(gy) < 2;
 
   return (
@@ -673,9 +686,11 @@ function ToolOscilo() {
       stRef.current = s;
       const actx = new AudioContext(); actxRef.current = actx;
       const src = actx.createMediaStreamSource(s);
-      const anl = actx.createAnalyser(); anl.fftSize = 2048; src.connect(anl); anlRef.current = anl;
+      const anl = actx.createAnalyser(); anl.fftSize = 8192; src.connect(anl); anlRef.current = anl;
       setOn(true); setErr(null);
-      const td = new Float32Array(anl.fftSize), fd = new Uint8Array(anl.frequencyBinCount);
+      // fftSize 8192 → resolución ~5.4 Hz/bin a 44100 Hz
+      const DISP = 2048; // muestras a dibujar (ventana visible)
+      const td = new Float32Array(anl.fftSize), fd = new Float32Array(anl.frequencyBinCount);
       const draw = () => {
         const c = cRef.current; if (!c) return;
         const cx = c.getContext("2d"), W = c.width, H = c.height;
@@ -684,14 +699,27 @@ function ToolOscilo() {
         cx.strokeStyle = "#1A2030"; cx.lineWidth = 1;
         for (let i = 1; i < 4; i++) { cx.beginPath(); cx.moveTo(0, H*i/4); cx.lineTo(W, H*i/4); cx.stroke(); }
         for (let i = 1; i < 8; i++) { cx.beginPath(); cx.moveTo(W*i/8, 0); cx.lineTo(W*i/8, H); cx.stroke(); }
+        // Disparador: encontrar cruce por cero ascendente para estabilizar imagen
+        let trig = 0;
+        for (let i = 1; i < td.length - DISP; i++) {
+          if (td[i-1] < 0 && td[i] >= 0) { trig = i; break; }
+        }
         cx.strokeStyle = C.amber; cx.lineWidth = 2; cx.beginPath();
-        const sw = W / td.length; let x = 0;
-        for (let i = 0; i < td.length; i++) { const y = (1 - td[i]) * H / 2; i === 0 ? cx.moveTo(x,y) : cx.lineTo(x,y); x += sw; }
+        const sw = W / DISP;
+        for (let i = 0; i < DISP; i++) {
+          const y = (1 - td[trig + i]) * H / 2;
+          i === 0 ? cx.moveTo(0, y) : cx.lineTo(i * sw, y);
+        }
         cx.stroke();
-        anl.getByteFrequencyData(fd);
-        let mi = 0, mv = 0;
-        for (let i = 1; i < fd.length; i++) if (fd[i] > mv) { mv = fd[i]; mi = i; }
-        if (mv > 20) setFreq((mi * actx.sampleRate / anl.fftSize).toFixed(0)); else setFreq(null);
+        // Frecuencia con interpolación parabólica (±0.5 bin de error)
+        anl.getFloatFrequencyData(fd);
+        let mi = 1, mv = -Infinity;
+        for (let i = 1; i < fd.length - 1; i++) if (fd[i] > mv) { mv = fd[i]; mi = i; }
+        if (mv > -80) {
+          const a = fd[mi-1], b = fd[mi], cc = fd[mi+1];
+          const refinedBin = mi + 0.5 * (a - cc) / (a - 2*b + cc + 1e-9);
+          setFreq((refinedBin * actx.sampleRate / anl.fftSize).toFixed(1));
+        } else { setFreq(null); }
         rafRef.current = requestAnimationFrame(draw);
       };
       rafRef.current = requestAnimationFrame(draw);
