@@ -770,7 +770,7 @@ function Home({ onSel }) {
         ))}
       </div>
       <div style={{ marginTop:14, fontFamily:MONO, fontSize:9, color:C.dim, textAlign:"center", letterSpacing:1 }}>
-        SEM TOOLS v2 · SOLUCIONES ELECTROMÉDICAS SJ
+        SEM TOOLS v2
       </div>
     </div>
   );
@@ -808,7 +808,7 @@ function App() {
         )}
         <div>
           <div style={S.logo}>{active ? `${active.icon} ${active.t}` : "SEM Tools"}</div>
-          <div style={S.sub}>SOLUCIONES ELECTROMÉDICAS · SAN JUAN</div>
+          <div style={S.sub}>HERRAMIENTAS DE TALLER</div>
         </div>
       </div>
       <div style={S.body}>
