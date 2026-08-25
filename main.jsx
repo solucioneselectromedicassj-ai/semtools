@@ -30,13 +30,16 @@ const TOOL = {
   distancia:    { icon:"📏", label:"Distancia",       sub:"IA o medición por toque",              col:C.violet },
   jack:         { icon:"🔌", label:"Sensores Jack",   sub:"Temperatura · Flujo · Voltaje · Luz",  col:C.orange },
   tacometro:    { icon:"⚙️", label:"Tacómetro",       sub:"Módulo externo próximamente",          col:C.green  },
+  red:          { icon:"📶", label:"Red / Internet",  sub:"Velocidad · Ping · Tipo de conexión",  col:C.blue   },
+  modulos:      { icon:"📦", label:"Módulos",         sub:"Hardware externo · Catálogo y precios", col:C.green  },
 };
 
 const BLOCKS = [
   { id:"celular",  icon:"📱", label:"CELULAR",     col:C.cyan,   tools:["decibeles","nivel","brujula","oscilo"] },
   { id:"camara",   icon:"📷", label:"CÁMARA + IA", col:C.violet, tools:["resistencias","integrados","distancia"] },
   { id:"jack",     icon:"🔌", label:"JACK 3.5mm",  col:C.orange, tools:["jack"] },
-  { id:"modulos",  icon:"📡", label:"MÓDULOS",     col:C.green,  tools:["tacometro"] },
+  { id:"celularplus", icon:"📶", label:"CONECTIVIDAD", col:C.blue, tools:["red"] },
+  { id:"modulos",  icon:"📡", label:"MÓDULOS",     col:C.green,  tools:["tacometro","modulos"] },
 ];
 
 // ── Styles ────────────────────────────────────────────────────────────────────
@@ -179,6 +182,175 @@ function CameraView({ captureLabel="📷 Capturar", onCapture }) {
         )}
       </div>
     </>
+  );
+}
+
+
+// ── Device Compatibility Check ────────────────────────────────────────────────
+async function getDeviceInfo() {
+  const ua = navigator.userAgent;
+  const isAndroid = /Android/.test(ua);
+  const isIOS = /iPhone|iPad|iPod/.test(ua);
+  const modelRaw = isAndroid
+    ? (ua.match(/;\s*([^;)]+)\s+Build/)?.[1] || ua.match(/Android [^;]+;\s*([^)]+)\)/)?.[1] || "Android")
+    : isIOS ? (ua.match(/(iPhone|iPad)/)?.[0] || "iOS") : "Desconocido";
+  const model = modelRaw.trim().slice(0, 40);
+  const osVer = isAndroid ? (ua.match(/Android\s([\d.]+)/)?.[1] || "?")
+                           : (ua.match(/OS\s([\d_]+)/)?.[1]?.replace(/_/g,".") || "?");
+
+  let bat = null;
+  try { bat = await navigator.getBattery(); } catch(e) {}
+
+  const conn = navigator.connection || navigator.mozConnection || null;
+
+  const caps = {
+    camera:       !!(navigator.mediaDevices?.getUserMedia),
+    microphone:   !!(navigator.mediaDevices?.getUserMedia),
+    gyroscope:    typeof DeviceOrientationEvent !== "undefined",
+    magnetometer: typeof DeviceOrientationEvent !== "undefined",
+    bluetooth:    !!navigator.bluetooth,
+    usb:          !!navigator.usb,
+    memory:       navigator.deviceMemory || null,   // GB
+    cores:        navigator.hardwareConcurrency || null,
+    vibration:    !!navigator.vibrate,
+    ambient:      !!window.AmbientLightSensor,
+  };
+
+  const warns = [];
+  if (bat && bat.level < 0.20 && !bat.charging) warns.push("🔋 Batería < 20% — cargá antes de usar herramientas de cámara o micrófono");
+  if (!caps.gyroscope) warns.push("⚠ Giroscopio no disponible — Nivel y Brújula no funcionarán");
+  if (!caps.camera) warns.push("⚠ Cámara sin acceso — Herramientas de IA desactivadas");
+  if (!caps.microphone) warns.push("⚠ Micrófono sin acceso — Osciloscopio y Decibelímetro desactivados");
+
+  return { model, os: isAndroid?"Android":isIOS?"iOS":"Otro", osVer, bat, caps, conn, warns, isAndroid, isIOS };
+}
+
+function DevicePanel({ info, onClose }) {
+  if (!info) return null;
+  const { model, os, osVer, bat, caps, conn, warns } = info;
+  const batPct = bat ? Math.round(bat.level * 100) : null;
+  const batCol = batPct === null ? C.dim : batPct > 40 ? C.green : batPct > 20 ? C.amber : C.red;
+
+  const TOOL_COMPAT = [
+    { label:"Decibelímetro",   ok: caps.microphone,   reason:"Requiere micrófono" },
+    { label:"Osciloscopio",    ok: caps.microphone,   reason:"Requiere micrófono" },
+    { label:"Nivel",           ok: caps.gyroscope,    reason:"Requiere giroscopio" },
+    { label:"Brújula",         ok: caps.magnetometer, reason:"Requiere magnetómetro" },
+    { label:"Resistencias",    ok: caps.camera,       reason:"Requiere cámara" },
+    { label:"Integrados IC",   ok: caps.camera,       reason:"Requiere cámara" },
+    { label:"Distancia",       ok: caps.camera,       reason:"Requiere cámara" },
+    { label:"Sensores Jack",   ok: caps.microphone,   reason:"Requiere entrada de audio" },
+    { label:"Bluetooth BLE",   ok: caps.bluetooth,    reason:"BT no disponible" },
+    { label:"USB-C Módulos",   ok: caps.usb,          reason:"WebUSB no disponible" },
+  ];
+
+  return (
+    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.85)",
+                  backdropFilter:"blur(8px)", zIndex:100, overflowY:"auto",
+                  display:"flex", flexDirection:"column" }}>
+      <div style={{ padding:"14px 14px 20px", display:"flex", flexDirection:"column", gap:14 }}>
+        {/* Header */}
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+          <div>
+            <div style={{ fontFamily:MONO, fontSize:14, fontWeight:700, color:C.amber,
+                          textShadow:`0 0 12px ${C.amber}` }}>Diagnóstico del dispositivo</div>
+            <div style={{ fontFamily:MONO, fontSize:9, color:C.dim, marginTop:2 }}>
+              {model} · {os} {osVer}
+            </div>
+          </div>
+          <button style={{ border:"none", background:"rgba(255,255,255,0.08)", color:C.text,
+                           borderRadius:8, padding:"8px 14px", fontFamily:MONO, fontSize:12,
+                           cursor:"pointer" }} onClick={onClose}>Cerrar</button>
+        </div>
+
+        {/* Advertencias */}
+        {warns.length > 0 && (
+          <div style={{ ...glass(C.red, 0.06), borderRadius:10, padding:12,
+                        border:`1px solid rgba(${rgb(C.red)},0.25)` }}>
+            <div style={{ fontFamily:MONO, fontSize:9, color:C.red, fontWeight:700, marginBottom:6 }}>ADVERTENCIAS</div>
+            {warns.map((w,i) => (
+              <div key={i} style={{ fontFamily:MONO, fontSize:11, color:C.amber, lineHeight:1.8 }}>{w}</div>
+            ))}
+          </div>
+        )}
+
+        {/* Batería + conectividad */}
+        <div style={S.row}>
+          <div style={{ ...S.disp(batCol), flex:1, textAlign:"center" }}>
+            <div style={{ fontFamily:MONO, fontSize:30, fontWeight:700, color:batCol,
+                          textShadow:`0 0 14px ${batCol}` }}>
+              {batPct !== null ? batPct+"%" : "---"}
+            </div>
+            <div style={S.dlbl}>{bat?.charging ? "⚡ CARGANDO" : "🔋 BATERÍA"}</div>
+          </div>
+          {conn && (
+            <div style={{ ...S.disp(C.cyan), flex:1, textAlign:"center" }}>
+              <div style={{ fontFamily:MONO, fontSize:24, fontWeight:700, color:C.cyan,
+                            textShadow:`0 0 12px ${C.cyan}` }}>
+                {conn.effectiveType?.toUpperCase() || "---"}
+              </div>
+              <div style={S.dlbl}>{conn.downlink ? conn.downlink+" Mbps" : "RED"}</div>
+            </div>
+          )}
+        </div>
+
+        {/* Hardware */}
+        <div style={{ ...glass(C.violet, 0.05), borderRadius:10, padding:12,
+                      border:`1px solid rgba(${rgb(C.violet)},0.2)` }}>
+          <div style={{ fontFamily:MONO, fontSize:9, color:C.violet, fontWeight:700, marginBottom:8 }}>HARDWARE</div>
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:6 }}>
+            {[
+              ["RAM", caps.memory ? caps.memory+" GB" : "?"],
+              ["CPU", caps.cores ? caps.cores+" núcleos" : "?"],
+              ["Vibración", caps.vibration ? "✓" : "✗"],
+              ["Luz amb.", caps.ambient ? "✓" : "✗"],
+            ].map(([k,v]) => (
+              <div key={k} style={{ display:"flex", justifyContent:"space-between",
+                                    padding:"5px 8px", background:"rgba(255,255,255,0.04)",
+                                    borderRadius:6 }}>
+                <span style={{ fontFamily:MONO, fontSize:10, color:C.dim }}>{k}</span>
+                <span style={{ fontFamily:MONO, fontSize:10, color:C.text, fontWeight:700 }}>{v}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Compatibilidad por herramienta */}
+        <div style={{ ...glass(C.cyan, 0.04), borderRadius:10, padding:12,
+                      border:`1px solid rgba(${rgb(C.cyan)},0.2)` }}>
+          <div style={{ fontFamily:MONO, fontSize:9, color:C.cyan, fontWeight:700, marginBottom:10 }}>
+            COMPATIBILIDAD DE HERRAMIENTAS
+          </div>
+          <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
+            {TOOL_COMPAT.map(({ label, ok, reason }) => (
+              <div key={label} style={{ display:"flex", justifyContent:"space-between",
+                                        alignItems:"center", padding:"6px 8px",
+                                        background:"rgba(255,255,255,0.03)", borderRadius:7 }}>
+                <span style={{ fontFamily:MONO, fontSize:11, color:ok ? C.text : C.dim }}>{label}</span>
+                <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+                  {!ok && <span style={{ fontFamily:MONO, fontSize:9, color:C.dim }}>{reason}</span>}
+                  <span style={{ fontFamily:MONO, fontSize:13, fontWeight:700,
+                                 color:ok?C.green:C.red, textShadow:`0 0 8px ${ok?C.green:C.red}` }}>
+                    {ok ? "✓" : "✗"}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Recomendaciones */}
+        <div style={S.note}>
+          <div style={{ fontFamily:MONO, fontSize:9, color:C.amber, fontWeight:700, marginBottom:6 }}>RECOMENDACIONES</div>
+          <div style={{ fontFamily:MONO, fontSize:10, color:C.dim, lineHeight:1.9 }}>
+            🔋 Mantené carga mínima 30% para usar cámara y micrófono<br/>
+            📱 Cerrá otras apps en segundo plano para mejor precisión<br/>
+            🌡 Evitá usar en condiciones de calor extremo (protección térmica reduce rendimiento)<br/>
+            🔌 Para módulos USB-C: usá cable OTG certificado, evitá cables USB 2.0 sin datos
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -328,37 +500,55 @@ function ToolDistancia() {
   );
 }
 
-// ── Sensores Jack ─────────────────────────────────────────────────────────────
+
+// ── Sensores Jack — dual temperatura incluida ─────────────────────────────────
 const JACK_MODS=[
-  {id:"thermo",label:"Temperatura",  unit:"°C",  icon:"🌡", convert:v=>v*100-40,   col:C.red    },
-  {id:"air",   label:"Flujo aire",   unit:"m/s", icon:"💨", convert:v=>Math.sqrt(Math.max(0,v)*8), col:C.blue},
-  {id:"volt",  label:"Voltaje CC",   unit:"V",   icon:"⚡", convert:v=>v*30,        col:C.amber  },
-  {id:"light", label:"Luminosidad",  unit:"lux", icon:"☀️", convert:v=>v**2.5*100, col:C.violet },
-  {id:"raw",   label:"Señal cruda",  unit:"mV",  icon:"〜", convert:v=>v*1000,     col:C.green  },
+  {id:"thermo",  label:"Temperatura",  unit:"°C",  icon:"🌡", convert:v=>v*100-40,              col:C.red,    mono:true},
+  {id:"thermo2", label:"Dual Temp",    unit:"°C",  icon:"🌡🌡",convert:v=>v*100-40,             col:C.violet, mono:false},
+  {id:"air",     label:"Flujo aire",   unit:"m/s", icon:"💨", convert:v=>Math.sqrt(Math.max(0,v)*8), col:C.blue, mono:true},
+  {id:"volt",    label:"Voltaje CC",   unit:"V",   icon:"⚡", convert:v=>v*30,                  col:C.amber,  mono:true},
+  {id:"light",   label:"Luminosidad",  unit:"lux", icon:"☀️", convert:v=>v**2.5*100,            col:C.violet, mono:true},
+  {id:"raw",     label:"Señal cruda",  unit:"mV",  icon:"〜", convert:v=>v*1000,               col:C.green,  mono:true},
 ];
 
 function ToolJack() {
   const col=C.orange;
   const [on,setOn]=useState(false), [mod,setMod]=useState("thermo");
-  const [val,setVal]=useState(null), [peak,setPeak]=useState(null), [minV,setMin]=useState(null);
+  const [val,setVal]=useState(null), [val2,setVal2]=useState(null);
+  const [peak,setPeak]=useState(null), [minV,setMin]=useState(null);
   const [err,setErr]=useState(null);
   const anlRef=useRef(),rafRef=useRef(),stRef=useRef(),canRef=useRef();
   const m=JACK_MODS.find(x=>x.id===mod);
 
   const start=async()=>{
     try{
-      const s=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:false}});
+      const s=await navigator.mediaDevices.getUserMedia({
+        audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:false,channelCount:2}
+      });
       stRef.current=s;
       const actx=new AudioContext(), src=actx.createMediaStreamSource(s);
-      const anl=actx.createAnalyser(); anl.fftSize=1024; src.connect(anl); anlRef.current=anl;
+      const splitter=actx.createChannelSplitter(2);
+      src.connect(splitter);
+      const anlL=actx.createAnalyser(); anlL.fftSize=1024;
+      const anlR=actx.createAnalyser(); anlR.fftSize=1024;
+      splitter.connect(anlL,0); splitter.connect(anlR,1);
+      anlRef.current={L:anlL,R:anlR};
       setOn(true); setErr(null);
-      const td=new Float32Array(anl.fftSize);
+      const td=new Float32Array(anlL.fftSize), td2=new Float32Array(anlR.fftSize);
       const draw=()=>{
-        anl.getFloatTimeDomainData(td);
+        anlL.getFloatTimeDomainData(td);
         let rms=0; for(let i=0;i<td.length;i++) rms+=td[i]*td[i];
         rms=Math.sqrt(rms/td.length);
         const v=m.convert(rms);
         setVal(v); setPeak(p=>p===null||v>p?v:p); setMin(n=>n===null||v<n?v:n);
+        // Canal R (sonda 2 — solo para dual temp)
+        if(mod==="thermo2"){
+          anlR.getFloatTimeDomainData(td2);
+          let rms2=0; for(let i=0;i<td2.length;i++) rms2+=td2[i]*td2[i];
+          rms2=Math.sqrt(rms2/td2.length);
+          setVal2(m.convert(rms2));
+        }
+        // Waveform canvas
         const c=canRef.current; if(c){
           const cx=c.getContext("2d"),W=c.width,H=c.height;
           cx.fillStyle="rgba(0,0,0,0.75)"; cx.fillRect(0,0,W,H);
@@ -375,7 +565,7 @@ function ToolJack() {
     } catch(e){ setErr("Sin acceso jack: "+e.message); }
   };
 
-  const stop=()=>{ cancelAnimationFrame(rafRef.current); stRef.current?.getTracks().forEach(t=>t.stop()); setOn(false); setVal(null); };
+  const stop=()=>{ cancelAnimationFrame(rafRef.current); stRef.current?.getTracks().forEach(t=>t.stop()); setOn(false); setVal(null); setVal2(null); };
   useEffect(()=>()=>{ cancelAnimationFrame(rafRef.current); stRef.current?.getTracks().forEach(t=>t.stop()); },[]);
 
   const fmt=v=>{ if(v===null||isNaN(v)) return "---"; return Math.abs(v)<10?v.toFixed(2):Math.abs(v)<100?v.toFixed(1):Math.round(v).toString(); };
@@ -388,20 +578,44 @@ function ToolJack() {
           <button key={x.id} style={{border:mod===x.id?`2px solid ${x.col}`:`1px solid ${C.bord}`,
             borderRadius:10,padding:"9px 4px",background:mod===x.id?`rgba(${rgb(x.col)},0.12)`:"rgba(255,255,255,0.04)",
             cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:3,
-            boxShadow:mod===x.id?glow(x.col,0.2):"none"}} onClick={()=>{setMod(x.id);setPeak(null);setMin(null);}}>
-            <span style={{fontSize:20}}>{x.icon}</span>
-            <span style={{fontFamily:MONO,fontSize:9,color:mod===x.id?x.col:C.dim,fontWeight:700}}>{x.label}</span>
+            boxShadow:mod===x.id?glow(x.col,0.2):"none"}} onClick={()=>{setMod(x.id);setPeak(null);setMin(null);setVal2(null);}}>
+            <span style={{fontSize:mod===x.id?22:18}}>{x.icon}</span>
+            <span style={{fontFamily:MONO,fontSize:8,color:mod===x.id?x.col:C.dim,fontWeight:700,textAlign:"center"}}>{x.label}</span>
           </button>
         ))}
       </div>
-      <div style={{...S.disp(m.col),display:"flex",alignItems:"baseline",gap:4}}>
-        <span style={S.dval(m.col)}>{fmt(val)}</span>
-        <span style={S.dunt}>{m.unit}</span>
-        <div style={{flex:1}}/>
-        <div style={S.dlbl}>{m.icon} {m.label.toUpperCase()}</div>
-      </div>
+
+      {/* Display principal */}
+      {mod !== "thermo2" ? (
+        <div style={{...S.disp(m.col),display:"flex",alignItems:"baseline",gap:4}}>
+          <span style={S.dval(m.col)}>{fmt(val)}</span>
+          <span style={S.dunt}>{m.unit}</span>
+          <div style={{flex:1}}/><div style={S.dlbl}>{m.icon} {m.label.toUpperCase()}</div>
+        </div>
+      ) : (
+        <div style={S.row}>
+          <div style={{...S.disp(C.red),flex:1,textAlign:"center"}}>
+            <div style={{fontFamily:MONO,fontSize:9,color:C.dim}}>SONDA 1 (L)</div>
+            <div style={{fontFamily:MONO,fontSize:30,fontWeight:700,color:C.red,textShadow:`0 0 14px ${C.red}`}}>{fmt(val)}°C</div>
+          </div>
+          <div style={{...S.disp(C.violet),flex:1,textAlign:"center"}}>
+            <div style={{fontFamily:MONO,fontSize:9,color:C.dim}}>SONDA 2 (R)</div>
+            <div style={{fontFamily:MONO,fontSize:30,fontWeight:700,color:C.violet,textShadow:`0 0 14px ${C.violet}`}}>{fmt(val2)}°C</div>
+          </div>
+        </div>
+      )}
+      {mod === "thermo2" && val !== null && val2 !== null && (
+        <div style={{...S.disp(C.amber),textAlign:"center",padding:"10px 16px"}}>
+          <div style={{fontFamily:MONO,fontSize:9,color:C.dim}}>DIFERENCIA</div>
+          <div style={{fontFamily:MONO,fontSize:24,fontWeight:700,color:C.amber,textShadow:`0 0 12px ${C.amber}`}}>
+            {Math.abs(parseFloat(fmt(val))-parseFloat(fmt(val2))).toFixed(1)} °C
+          </div>
+        </div>
+      )}
+
       <canvas ref={canRef} width={640} height={90}
         style={{width:"100%",borderRadius:8,border:`1px solid rgba(${rgb(m.col)},0.2)`,background:"rgba(0,0,0,0.7)"}}/>
+
       {(peak!==null||minV!==null)&&(
         <div style={S.row}>
           <div style={{...S.disp(C.blue),flex:1,textAlign:"center",padding:"10px 8px"}}>
@@ -418,7 +632,8 @@ function ToolJack() {
       {err&&<div style={{color:C.amber,fontFamily:MONO,fontSize:10,lineHeight:1.6}}>{err}</div>}
       {!on?<button style={S.btn("p",col)} onClick={start}>Conectar sensor Jack</button>
           :<button style={S.btn("r")} onClick={stop}>Desconectar</button>}
-      <div style={S.note}>Ver manual de sensores para construir ThermoJack, AirJack, VoltJack o PhotoJack.</div>
+      {mod==="thermo2"&&<div style={S.note}>Dual Temp: conectá sonda 1 al canal L y sonda 2 al canal R del jack estéreo (TRRS). Usá un adaptador Y si es necesario.</div>}
+      {mod!=="thermo2"&&<div style={S.note}>Ver manual de sensores para construir ThermoJack, AirJack, VoltJack o PhotoJack.</div>}
     </div>
   );
 }
@@ -839,6 +1054,234 @@ function ToolOscilo() {
   );
 }
 
+
+// ── Red / Internet ────────────────────────────────────────────────────────────
+function ToolRed() {
+  const col = C.blue;
+  const [info, setInfo]   = useState(null);
+  const [speed, setSpeed] = useState(null);
+  const [ping, setPing]   = useState(null);
+  const [testing, setTesting] = useState(false);
+  const [err, setErr]     = useState(null);
+
+  useEffect(() => {
+    const conn = navigator.connection || navigator.mozConnection || null;
+    setInfo({
+      type:        conn?.effectiveType || "desconocido",
+      downlink:    conn?.downlink || null,
+      rtt:         conn?.rtt || null,
+      saveData:    conn?.saveData || false,
+    });
+  }, []);
+
+  const runTest = async () => {
+    setTesting(true); setSpeed(null); setPing(null); setErr(null);
+    try {
+      // Ping
+      const p0 = performance.now();
+      await fetch("https://www.gstatic.com/generate_204", { mode:"no-cors", cache:"no-store" });
+      const pingMs = Math.round(performance.now() - p0);
+      setPing(pingMs);
+
+      // Download speed (10MB from Cloudflare)
+      const t0 = performance.now();
+      const res = await fetch("https://speed.cloudflare.com/__down?bytes=5000000", { cache:"no-store" });
+      const blob = await res.blob();
+      const secs = (performance.now() - t0) / 1000;
+      const mbps = ((blob.size * 8) / secs / 1e6).toFixed(1);
+      setSpeed(mbps);
+    } catch(e) {
+      setErr("No se pudo completar el test: " + e.message);
+    }
+    setTesting(false);
+  };
+
+  const typeCol = { "4g":C.green, "3g":C.amber, "2g":C.red, "slow-2g":C.red }[info?.type] || C.dim;
+
+  return (
+    <div style={S.wrap}>
+      <div style={S.st(col)}>▸ Red e Internet</div>
+
+      {/* Tipo de conexión */}
+      {info && (
+        <div style={{ ...S.disp(typeCol), display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+          <div>
+            <span style={{ ...S.dval(typeCol, 40) }}>{info.type.toUpperCase()}</span>
+            <div style={S.dlbl}>TIPO DE CONEXIÓN</div>
+          </div>
+          <div style={{ textAlign:"right" }}>
+            {info.downlink && <div style={{ fontFamily:MONO, fontSize:14, color:col, fontWeight:700 }}>{info.downlink} Mbps</div>}
+            {info.rtt && <div style={{ fontFamily:MONO, fontSize:11, color:C.dim }}>RTT: {info.rtt} ms</div>}
+            {info.saveData && <div style={S.pill(C.amber)}>Datos reducidos</div>}
+          </div>
+        </div>
+      )}
+
+      {/* Resultados del test */}
+      {(ping !== null || speed !== null) && (
+        <div style={S.row}>
+          {ping !== null && (
+            <div style={{ ...S.disp(ping < 50 ? C.green : ping < 150 ? C.amber : C.red), flex:1, textAlign:"center" }}>
+              <div style={{ fontFamily:MONO, fontSize:28, fontWeight:700,
+                            color: ping < 50 ? C.green : ping < 150 ? C.amber : C.red,
+                            textShadow:`0 0 12px ${ping<50?C.green:C.amber}` }}>{ping}</div>
+              <div style={S.dlbl}>PING (ms)</div>
+            </div>
+          )}
+          {speed !== null && (
+            <div style={{ ...S.disp(C.cyan), flex:1, textAlign:"center" }}>
+              <div style={{ fontFamily:MONO, fontSize:28, fontWeight:700, color:C.cyan, textShadow:`0 0 12px ${C.cyan}` }}>{speed}</div>
+              <div style={S.dlbl}>BAJADA (Mbps)</div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {err && <div style={{ color:C.red, fontFamily:MONO, fontSize:11, lineHeight:1.6 }}>{err}</div>}
+
+      <button style={{ ...S.btn("p", col), opacity: testing ? 0.7 : 1 }}
+        onClick={testing ? null : runTest}>
+        {testing ? "Midiendo… (puede tardar 10s)" : "▶ Medir velocidad"}
+      </button>
+
+      <div style={S.note}>
+        Mide la velocidad de bajada real y el ping hacia servidores externos.
+        Para medir la señal WiFi usá la barra de estado del sistema.
+      </div>
+    </div>
+  );
+}
+
+
+// ── Marketplace de Módulos ─────────────────────────────────────────────────────
+const MODULE_CATALOG = [
+  {
+    id:"tacolasr", icon:"⚙️", name:"Tacómetro Láser",
+    col:C.green, status:"dev",
+    desc:"Mide RPM sin contacto y sin efecto estroboscópico. Láser 650nm + fotodiodo + cinta reflectante. Rango: 30 – 60.000 RPM.",
+    iface:"Jack 3.5mm + USB-C alimentación",
+    price:"ARS 12.000 aprox.",
+    specs:["Rango: 30–60.000 RPM","Precisión ±0.1%","Alimentación: USB-C 5V","Señal: jack 3.5mm","Incluye: cinta reflectante + soporte magnético"],
+  },
+  {
+    id:"oscilo2", icon:"〜", name:"Osciloscopio 500kHz",
+    col:C.cyan, status:"design",
+    desc:"Osciloscopio real de 2 canales hasta 500kHz. STM32 + ADC 12-bit + Bluetooth BLE. 25× mejor que audio.",
+    iface:"Bluetooth BLE",
+    price:"ARS 28.000 aprox.",
+    specs:["2 canales simultáneos","BW: DC–500 kHz","ADC: 12-bit","Muestra: 2 Msps","Trigger: automático / manual","Batería interna 8h"],
+  },
+  {
+    id:"comptest", icon:"◻", name:"Tester de Componentes",
+    col:C.violet, status:"design",
+    desc:"Identifica y mide resistencias, capacitores, inductores, transistores, MOSFETs, diodos, LEDs y cristales. Sin tocar ningún menú.",
+    iface:"Bluetooth BLE",
+    price:"ARS 18.000 aprox.",
+    specs:["Autodetección de tipo","R: 0.1Ω – 50MΩ","C: 1pF – 100mF","L: 1µH – 1H","ESR de electrolíticos","hFE de transistores NPN/PNP"],
+  },
+  {
+    id:"termo2", icon:"🌡🌡", name:"Sondas Dual Temperatura",
+    col:C.red, status:"available",
+    desc:"Dos sondas NTC calibradas en un solo conector TRRS. Mide dos puntos simultáneamente y calcula diferencial.",
+    iface:"Jack 3.5mm (estéreo)",
+    price:"ARS 4.500 aprox.",
+    specs:["2 sondas NTC calibradas","Rango: -40°C a +125°C","Precisión: ±0.5°C","Longitud: 1m c/u","Conector TRRS integrado"],
+  },
+  {
+    id:"termocam", icon:"🌡", name:"Cámara Termográfica",
+    col:C.orange, status:"design",
+    desc:"Sensor IR MLX90640 (32×24px) superpuesto en tiempo real sobre la cámara del celular. Detecta puntos calientes en equipos electrónicos, motores y transformadores.",
+    iface:"Bluetooth BLE",
+    price:"ARS 45.000 aprox.",
+    specs:["Sensor: MLX90640","Resolución: 32×24 pixels","Rango: -40°C a +300°C","Precisión: ±1.5°C","Superposición sobre cámara HD","Paleta de colores configurable"],
+  },
+  {
+    id:"redcable", icon:"🔗", name:"Tester de Red / Cable UTP",
+    col:C.blue, status:"design",
+    desc:"Prueba continuidad de cables UTP, coaxial y fibra óptica. Reporta par defectuoso, cortocircuito y longitud aproximada via Bluetooth.",
+    iface:"Bluetooth BLE",
+    price:"ARS 15.000 aprox.",
+    specs:["UTP Cat5/6/7","Coaxial 50Ω/75Ω","Mide longitud por TDR","Detecta par roto/invertido","2 cabezales incluidos"],
+  },
+];
+
+const STATUS_LABEL = {
+  available: { label:"Disponible", col:C.green },
+  dev:       { label:"En desarrollo", col:C.amber },
+  design:    { label:"En diseño", col:C.violet },
+};
+
+function ToolModulos() {
+  const [sel, setSel] = useState(null);
+  const col = C.green;
+
+  if (sel) {
+    const m = MODULE_CATALOG.find(x => x.id === sel);
+    const st = STATUS_LABEL[m.status];
+    return (
+      <div style={S.wrap}>
+        <button style={S.btn("s")} onClick={() => setSel(null)}>← Volver al catálogo</button>
+        <div style={{ fontSize:40, textAlign:"center", filter:`drop-shadow(0 0 12px ${m.col}88)` }}>{m.icon}</div>
+        <div style={{ fontFamily:MONO, fontSize:16, fontWeight:700, color:m.col, textAlign:"center",
+                      textShadow:`0 0 16px ${m.col}` }}>{m.name}</div>
+        <div style={{ textAlign:"center" }}><span style={S.pill(st.col)}>{st.label}</span></div>
+        <div style={{ ...S.res(m.col), fontFamily:MONO, fontSize:11, color:C.text, lineHeight:1.9 }}>{m.desc}</div>
+        <div style={{ ...S.disp(m.col) }}>
+          <div style={{ fontFamily:MONO, fontSize:9, color:C.dim, marginBottom:8 }}>ESPECIFICACIONES</div>
+          {m.specs.map((s,i) => (
+            <div key={i} style={{ fontFamily:MONO, fontSize:11, color:C.text, lineHeight:1.9 }}>
+              <span style={{ color:m.col }}>▸ </span>{s}
+            </div>
+          ))}
+        </div>
+        <div style={S.row}>
+          <div style={{ ...S.disp(C.amber), flex:1, textAlign:"center" }}>
+            <div style={{ fontFamily:MONO, fontSize:9, color:C.dim }}>INTERFAZ</div>
+            <div style={{ fontFamily:MONO, fontSize:11, color:C.amber, fontWeight:700, marginTop:4 }}>{m.iface}</div>
+          </div>
+          <div style={{ ...S.disp(C.green), flex:1, textAlign:"center" }}>
+            <div style={{ fontFamily:MONO, fontSize:9, color:C.dim }}>PRECIO EST.</div>
+            <div style={{ fontFamily:MONO, fontSize:11, color:C.green, fontWeight:700, marginTop:4 }}>{m.price}</div>
+          </div>
+        </div>
+        {m.status === "available"
+          ? <button style={S.btn("p", C.green)}>🛒  Consultar disponibilidad</button>
+          : <div style={S.tag(false)}>⏳  {st.label} — te avisamos cuando esté listo</div>
+        }
+        <div style={S.note}>Los módulos son de fabricación local. Compatible con Android 8+ y iOS 14+. Sin drivers adicionales.</div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={S.wrap}>
+      <div style={S.st(col)}>▸ Módulos de Hardware</div>
+      <div style={{ fontFamily:MONO, fontSize:10, color:C.dim, lineHeight:1.8 }}>
+        Módulos fabricados localmente que extienden las capacidades de la app.
+        Conectan por jack 3.5mm, USB-C o Bluetooth BLE.
+      </div>
+      <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+        {MODULE_CATALOG.map(m => {
+          const st = STATUS_LABEL[m.status];
+          return (
+            <div key={m.id} style={{ ...S.card(m.col) }} onClick={() => setSel(m.id)}>
+              <div style={{ fontSize:28, filter:`drop-shadow(0 0 8px ${m.col}66)` }}>{m.icon}</div>
+              <div style={{ flex:1 }}>
+                <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:4 }}>
+                  <div style={{ fontFamily:MONO, fontSize:12, fontWeight:700, color:C.text }}>{m.name}</div>
+                  <span style={S.pill(st.col)}>{st.label}</span>
+                </div>
+                <div style={{ fontSize:10, color:C.dim, lineHeight:1.45 }}>{m.desc.slice(0,80)}…</div>
+                <div style={{ fontFamily:MONO, fontSize:9, color:m.col, marginTop:6 }}>{m.iface} · {m.price}</div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // ── Módulo placeholder ────────────────────────────────────────────────────────
 function ModulePlaceholder({icon,title,why,when}) {
   return (
@@ -894,6 +1337,8 @@ const VIEWS = {
   resistencias:<ToolResistencias/>, integrados:<ToolIntegrado/>, distancia:<ToolDistancia/>,
   jack:<ToolJack/>, decibeles:<ToolDecibeles/>, nivel:<ToolNivel/>,
   brujula:<ToolBrujula/>, oscilo:<ToolOscilo/>,
+  red:<ToolRed/>,
+  modulos:<ToolModulos/>,
   tacometro:<ModulePlaceholder icon="⚙️" title="Tacómetro Estroboscópico"
     why={"El efecto estroboscópico puede desencadenar convulsiones.\nRequiere módulo externo con LED controlado."}
     when="LED IR + fotodetector vía USB-C · En desarrollo"/>,
@@ -901,8 +1346,12 @@ const VIEWS = {
 
 function App() {
   const [tool,setTool]=useState(null);
+  const [devInfo,setDevInfo]=useState(null);
+  const [showDev,setShowDev]=useState(false);
   const t=tool?TOOL[tool]:null;
   const col=t?.col||C.amber;
+
+  useEffect(()=>{ getDeviceInfo().then(setDevInfo); },[]);
 
   useEffect(()=>{
     const l=document.createElement("link"); l.rel="stylesheet";
@@ -910,14 +1359,23 @@ function App() {
     document.head.appendChild(l);
   },[]);
 
+  const batPct = devInfo?.bat ? Math.round(devInfo.bat.level*100) : null;
+  const batLow  = batPct !== null && batPct < 20 && !devInfo?.bat?.charging;
+
   return (
     <div style={S.app}>
+      {showDev && <DevicePanel info={devInfo} onClose={()=>setShowDev(false)}/>}
       <div style={S.hdr}>
         {tool&&<button style={{border:"none",background:"none",color:col,fontFamily:MONO,fontSize:22,cursor:"pointer",padding:"0 8px 0 0",textShadow:`0 0 12px ${col}66`}} onClick={()=>setTool(null)}>←</button>}
         <div>
           <div style={{...S.logo,color:col}}>{t?`${t.icon} ${t.label}`:"SEM Tools"}</div>
           <div style={S.sub}>HERRAMIENTAS DE TALLER</div>
         </div>
+        <div style={{flex:1}}/>
+        <button style={{border:"none",background:"rgba(255,255,255,0.06)",borderRadius:8,padding:"6px 10px",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:2}} onClick={()=>setShowDev(true)}>
+          <span style={{fontSize:14,lineHeight:1}}>{batLow?"🔴":"📱"}</span>
+          {batPct!==null&&<span style={{fontFamily:MONO,fontSize:8,color:batLow?C.red:C.dim,fontWeight:700}}>{batPct}%</span>}
+        </button>
       </div>
       <div style={S.body}>
         {tool===null?<Home onSel={setTool}/>:VIEWS[tool]}
