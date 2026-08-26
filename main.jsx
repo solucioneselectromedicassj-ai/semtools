@@ -6,6 +6,8 @@ if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(() => {}));
 }
 
+const VERSION = "2.6";
+
 // ── Helpers ──────────────────────────────────────────────────────────────────
 const rgb = hex => { if(!hex||typeof hex!=='string'||!hex.startsWith('#')) return '128,128,128'; return `${parseInt(hex.slice(1,3),16)},${parseInt(hex.slice(3,5),16)},${parseInt(hex.slice(5,7),16)}`; };
 const glow = (h,a=0.45) => h?`0 0 22px rgba(${rgb(h)},${a})`:'none';
@@ -280,362 +282,6 @@ function CameraView({ captureLabel="📷 Capturar", onCapture }) {
 
 
 // ── Device Compatibility Check ────────────────────────────────────────────────
-async function getDeviceInfo() {
-  const ua = navigator.userAgent;
-  const isAndroid = /Android/.test(ua);
-  const isIOS = /iPhone|iPad|iPod/.test(ua);
-  const modelRaw = isAndroid
-    ? (ua.match(/Android ([^;]+); ([^)]+)/)?.[2] || "Android")
-    : isIOS ? (ua.match(/(iPhone|iPad)/)?.[0] || "iOS") : "Desconocido";
-  const model = modelRaw.trim().slice(0, 40);
-  const osVer = isAndroid ? (ua.match(/Android\s([\d.]+)/)?.[1] || "?")
-                           : (ua.match(/OS\s([\d_]+)/)?.[1]?.replace(/_/g,".") || "?");
-
-  let bat = null;
-  try { bat = await navigator.getBattery(); } catch(e) {}
-
-  const conn = navigator.connection || navigator.mozConnection || null;
-
-  const caps = {
-    camera:       !!(navigator.mediaDevices?.getUserMedia),
-    microphone:   !!(navigator.mediaDevices?.getUserMedia),
-    gyroscope:    typeof DeviceOrientationEvent !== "undefined",
-    magnetometer: typeof DeviceOrientationEvent !== "undefined",
-    bluetooth:    !!navigator.bluetooth,
-    usb:          !!navigator.usb,
-    memory:       navigator.deviceMemory || null,   // GB
-    cores:        navigator.hardwareConcurrency || null,
-    vibration:    !!navigator.vibrate,
-    ambient:      !!window.AmbientLightSensor,
-  };
-
-  const warns = [];
-  if (bat && bat.level < 0.20 && !bat.charging) warns.push("🔋 Batería < 20% — cargá antes de usar herramientas de cámara o micrófono");
-  if (!caps.gyroscope) warns.push("⚠ Giroscopio no disponible — Nivel y Brújula no funcionarán");
-  if (!caps.camera) warns.push("⚠ Cámara sin acceso — Herramientas de IA desactivadas");
-  if (!caps.microphone) warns.push("⚠ Micrófono sin acceso — Osciloscopio y Decibelímetro desactivados");
-
-  return { model, os: isAndroid?"Android":isIOS?"iOS":"Otro", osVer, bat, caps, conn, warns, isAndroid, isIOS };
-}
-
-function DevicePanel({ info, onClose }) {
-  if (!info) return null;
-  const { model, os, osVer, bat, caps, conn, warns } = info;
-  const batPct = bat ? Math.round(bat.level * 100) : null;
-  const batCol = batPct === null ? C.dim : batPct > 40 ? C.green : batPct > 20 ? C.amber : C.red;
-
-  const TOOL_COMPAT = [
-    { label:"Decibelímetro",   ok: caps.microphone,   reason:"Requiere micrófono" },
-    { label:"Osciloscopio",    ok: caps.microphone,   reason:"Requiere micrófono" },
-    { label:"Nivel",           ok: caps.gyroscope,    reason:"Requiere giroscopio" },
-    { label:"Brújula",         ok: caps.magnetometer, reason:"Requiere magnetómetro" },
-    { label:"Resistencias",    ok: caps.camera,       reason:"Requiere cámara" },
-    { label:"Integrados IC",   ok: caps.camera,       reason:"Requiere cámara" },
-    { label:"Distancia",       ok: caps.camera,       reason:"Requiere cámara" },
-    { label:"Sensores Jack",   ok: caps.microphone,   reason:"Requiere entrada de audio" },
-    { label:"Bluetooth BLE",   ok: caps.bluetooth,    reason:"BT no disponible" },
-    { label:"USB-C Módulos",   ok: caps.usb,          reason:"WebUSB no disponible" },
-  ];
-
-  return (
-    <div style={{ position:"fixed", inset:0, background:"linear-gradient(170deg,#0D1829EE 0%,#152240F5 100%)",
-                  backdropFilter:"blur(8px)", zIndex:100, overflowY:"auto",
-                  display:"flex", flexDirection:"column" }}>
-      <div style={{ padding:"14px 14px 20px", display:"flex", flexDirection:"column", gap:14 }}>
-        {/* Header */}
-        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-          <div>
-            <div style={{ fontFamily:MONO, fontSize:14, fontWeight:700, color:C.amber,
-                          textShadow:`0 0 12px ${C.amber}` }}>Diagnóstico del dispositivo</div>
-            <div style={{ fontFamily:MONO, fontSize:9, color:C.dim, marginTop:2 }}>
-              {model} · {os} {osVer}
-            </div>
-          </div>
-          <button style={{ border:"none", background:"rgba(255,255,255,0.08)", color:C.text,
-                           borderRadius:8, padding:"8px 14px", fontFamily:MONO, fontSize:12,
-                           cursor:"pointer" }} onClick={onClose}>Cerrar</button>
-        </div>
-
-        {/* Advertencias */}
-        {warns.length > 0 && (
-          <div style={{ ...glass(C.red, 0.06), borderRadius:10, padding:12,
-                        border:`1px solid rgba(${rgb(C.red)},0.25)` }}>
-            <div style={{ fontFamily:MONO, fontSize:9, color:C.red, fontWeight:700, marginBottom:6 }}>ADVERTENCIAS</div>
-            {warns.map((w,i) => (
-              <div key={i} style={{ fontFamily:MONO, fontSize:11, color:C.amber, lineHeight:1.8 }}>{w}</div>
-            ))}
-          </div>
-        )}
-
-        {/* Batería + conectividad */}
-        <div style={S.row}>
-          <div style={{ ...S.disp(batCol), flex:1, textAlign:"center" }}>
-            <div style={{ fontFamily:MONO, fontSize:30, fontWeight:700, color:batCol,
-                          textShadow:`0 0 14px ${batCol}` }}>
-              {batPct !== null ? batPct+"%" : "---"}
-            </div>
-            <div style={S.dlbl}>{bat?.charging ? "⚡ CARGANDO" : "🔋 BATERÍA"}</div>
-          </div>
-          {conn && (
-            <div style={{ ...S.disp(C.cyan), flex:1, textAlign:"center" }}>
-              <div style={{ fontFamily:MONO, fontSize:24, fontWeight:700, color:C.cyan,
-                            textShadow:`0 0 12px ${C.cyan}` }}>
-                {conn.effectiveType?.toUpperCase() || "---"}
-              </div>
-              <div style={S.dlbl}>{conn.downlink ? conn.downlink+" Mbps" : "RED"}</div>
-            </div>
-          )}
-        </div>
-
-        {/* Hardware */}
-        <div style={{ ...glass(C.violet, 0.05), borderRadius:10, padding:12,
-                      border:`1px solid rgba(${rgb(C.violet)},0.2)` }}>
-          <div style={{ fontFamily:MONO, fontSize:9, color:C.violet, fontWeight:700, marginBottom:8 }}>HARDWARE</div>
-          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:6 }}>
-            {[
-              ["RAM", caps.memory ? caps.memory+" GB" : "?"],
-              ["CPU", caps.cores ? caps.cores+" núcleos" : "?"],
-              ["Vibración", caps.vibration ? "✓" : "✗"],
-              ["Luz amb.", caps.ambient ? "✓" : "✗"],
-            ].map(([k,v]) => (
-              <div key={k} style={{ display:"flex", justifyContent:"space-between",
-                                    padding:"5px 8px", background:"rgba(255,255,255,0.04)",
-                                    borderRadius:6 }}>
-                <span style={{ fontFamily:MONO, fontSize:10, color:C.dim }}>{k}</span>
-                <span style={{ fontFamily:MONO, fontSize:10, color:C.text, fontWeight:700 }}>{v}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Compatibilidad por herramienta */}
-        <div style={{ ...glass(C.cyan, 0.04), borderRadius:10, padding:12,
-                      border:`1px solid rgba(${rgb(C.cyan)},0.2)` }}>
-          <div style={{ fontFamily:MONO, fontSize:9, color:C.cyan, fontWeight:700, marginBottom:10 }}>
-            COMPATIBILIDAD DE HERRAMIENTAS
-          </div>
-          <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
-            {TOOL_COMPAT.map(({ label, ok, reason }) => (
-              <div key={label} style={{ display:"flex", justifyContent:"space-between",
-                                        alignItems:"center", padding:"6px 8px",
-                                        background:"rgba(255,255,255,0.03)", borderRadius:7 }}>
-                <span style={{ fontFamily:MONO, fontSize:11, color:ok ? C.text : C.dim }}>{label}</span>
-                <div style={{ display:"flex", alignItems:"center", gap:6 }}>
-                  {!ok && <span style={{ fontFamily:MONO, fontSize:9, color:C.dim }}>{reason}</span>}
-                  <span style={{ fontFamily:MONO, fontSize:13, fontWeight:700,
-                                 color:ok?C.green:C.red, textShadow:`0 0 8px ${ok?C.green:C.red}` }}>
-                    {ok ? "✓" : "✗"}
-                  </span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Recomendaciones */}
-        <div style={S.note}>
-          <div style={{ fontFamily:MONO, fontSize:9, color:C.amber, fontWeight:700, marginBottom:6 }}>RECOMENDACIONES</div>
-          <div style={{ fontFamily:MONO, fontSize:10, color:C.dim, lineHeight:1.9 }}>
-            🔋 Mantené carga mínima 30% para usar cámara y micrófono<br/>
-            📱 Cerrá otras apps en segundo plano para mejor precisión<br/>
-            🌡 Evitá usar en condiciones de calor extremo (protección térmica reduce rendimiento)<br/>
-            🔌 Para módulos USB-C: usá cable OTG certificado, evitá cables USB 2.0 sin datos
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-
-
-// ── Onboarding — 3 pasos: API Key → Test sensores → Dashboard ────────────────
-
-// Qué sensor necesita cada herramienta
-const TOOL_NEEDS = {
-  decibeles:   { needs:["microphone"],                    label:"Decibelímetro"      },
-  nivel:       { needs:["accelerometer"],                 label:"Nivel"              },
-  brujula:     { needs:["magnetometer"],                  label:"Brújula"            },
-  oscilo:      { needs:["microphone"],                    label:"Osciloscopio"       },
-  sistema:     { needs:[],                                label:"Sistema"            },
-  qr:          { needs:["camera"],                        label:"QR / Código Barras" },
-  ir:          { needs:["camera"],                        label:"Control Remoto IR"  },
-  endoscopio:  { needs:["camera"],                        label:"Endoscopio / USB"   },
-  resistencias:{ needs:["camera","ai"],                   label:"Resistencias"       },
-  integrados:  { needs:["camera","ai"],                   label:"Integrados IC"      },
-  distancia:   { needs:["camera"],                        label:"Distancia"          },
-  jack_thermo: { needs:["microphone"],                    label:"Temperatura"        },
-  jack_thermo2:{ needs:["microphone"],                    label:"Dual Temp"          },
-  jack_air:    { needs:["microphone"],                    label:"Flujo Aire"         },
-  jack_volt:   { needs:["microphone"],                    label:"Voltaje CC"         },
-  jack_light:  { needs:["microphone"],                    label:"Luminosidad"        },
-  jack_raw:    { needs:["microphone"],                    label:"Señal Cruda"        },
-  red:         { needs:[],   label:"Red / Internet"  },
-  ping:        { needs:[],   label:"Ping"             },
-  lan:         { needs:[],   label:"Escáner LAN"      },
-  http:        { needs:[],   label:"HTTP Tester"       },
-  ble:         { needs:[],   label:"Scanner BLE"       },
-  ipinfo:      { needs:[],   label:"IP / ISP"          },
-  modulos:     { needs:[],                                label:"Módulos"            },
-  tacometro:   { needs:[],                                label:"Tacómetro"          },
-};
-
-function toolEnabled(toolId, caps) {
-  const needs = TOOL_NEEDS[toolId]?.needs || [];
-  return needs.every(n => caps[n]);
-}
-
-
-// ── Detección de marca y características del dispositivo ─────────────────────
-function detectBrand() {
-  const ua = navigator.userAgent;
-  const uaLow = ua.toLowerCase();
-
-  // Marca
-  let brand = "Android genérico", os = "Android", ui = "stock";
-  let hasJackGuess = true; // la mayoría tiene jack, excepto los conocidos sin él
-
-  if (/iphone|ipad/i.test(ua)) {
-    brand = "Apple"; os = "iOS"; ui = "ios";
-    // iPhone 7+ no tiene jack (2016+). Simplificación: asumir sin jack en iOS
-    hasJackGuess = false;
-  } else if (/samsung|sm-[a-z]/i.test(ua)) {
-    brand = "Samsung"; ui = "oneui";
-    // Modelos sin jack: S20+, A52s, etc. Difícil de detectar exactamente
-    if (/sm-g98|sm-g99|sm-f9|sm-s9|sm-a52/i.test(ua)) hasJackGuess = false;
-  } else if (/miui|xiaomi|redmi|poco/i.test(ua)) {
-    brand = "Xiaomi / Redmi"; ui = "miui";
-  } else if (/huawei|emui/i.test(ua)) {
-    brand = "Huawei"; ui = "emui";
-  } else if (/moto[a-z ]|motorola/i.test(ua)) {
-    brand = "Motorola"; ui = "stock";
-  } else if (/oneplus/i.test(ua)) {
-    brand = "OnePlus"; ui = "oxygen";
-    if (/oneplus 7t|oneplus 8|oneplus 9|oneplus 10|oneplus 11|oneplus 12/i.test(ua)) hasJackGuess = false;
-  } else if (/pixel/i.test(ua)) {
-    brand = "Google Pixel"; ui = "stock";
-    if (/pixel [3-9]|pixel pro/i.test(ua)) hasJackGuess = false;
-  } else if (/lg/i.test(ua)) {
-    brand = "LG";
-  } else if (/oppo|realme/i.test(ua)) {
-    brand = "OPPO / Realme"; ui = "coloros";
-  }
-
-  // Modelo crudo
-  const modelMatch = ua.match(/;\s*([^;)]+)\s*Build/) || ua.match(/;\s*([^;)]+)\)/);
-  const model = modelMatch?.[1]?.trim().slice(0,35) || brand;
-
-  // Versión Android
-  const androidVer = ua.match(/Android\s*([\d.]+)/)?.[1] || null;
-  const iosVer = ua.match(/OS\s*([\d_]+)/)?.[1]?.replace(/_/g,".") || null;
-  const osVer = androidVer || iosVer || "?";
-
-  // Consejos específicos por UI
-  const tips = {
-    miui: [
-      "⚙ MIUI restringe sensores en segundo plano — ve a Ajustes → Apps → Chrome → Permisos y habilitá todo",
-      "⚙ Si la brújula no funciona: Ajustes → Privacidad → Permisos especiales → Acceso a sensores",
-      "⚙ Para mejor rendimiento: Ajustes → Batería → Ahorro de energía → Desactivar para Chrome",
-      "⚙ MIUI puede matar apps en segundo plano — bloqueá Chrome en Recientes si usás la app mucho",
-    ],
-    oneui: [
-      "⚙ Samsung One UI: Ajustes → Biometría y seguridad → Gestión de permisos",
-      "⚙ Si el micrófono falla: Ajustes → Privacidad → Administrador de permisos → Micrófono → Chrome",
-      "⚙ Para NFC: Ajustes → Conexiones → NFC y pagos sin contacto → Activar",
-    ],
-    emui: [
-      "⚙ Huawei EMUI puede bloquear acceso a sensores — ve a Ajustes → Aplicaciones → Chrome → Permisos",
-      "⚙ Huawei sin Google: algunas funciones de localización pueden variar",
-      "⚙ Para Bluetooth BLE: Ajustes → Bluetooth → Activar → permitir acceso a ubicación a Chrome",
-    ],
-    ios: [
-      "⚙ iOS: para giroscopio y brújula ve a Ajustes → Safari/Chrome → Movimiento y orientación",
-      "⚙ iOS 13+: los sensores de movimiento requieren permiso explícito por cada web",
-      "⚙ Para NFC en iPhone: disponible en iPhone 7+, se activa automáticamente",
-    ],
-    oxygen: [
-      "⚙ OxygenOS: generalmente sin restricciones. Si hay problemas ve a Ajustes → Aplicaciones → Chrome",
-    ],
-    coloros: [
-      "⚙ ColorOS (OPPO/Realme): Ajustes → Batería → No optimizar → Chrome para mejor rendimiento",
-    ],
-    stock: [
-      "⚙ Android estándar: los permisos se gestionan en Ajustes → Aplicaciones → Chrome → Permisos",
-    ],
-  };
-
-  return {
-    brand, model, os, osVer, ui,
-    hasJackGuess,
-    tips: tips[ui] || tips.stock,
-  };
-}
-
-async function runSensorDetection() {
-  const brandInfo = detectBrand();
-  const caps = {
-    camera:        false,
-    microphone:    false,
-    accelerometer: false,
-    gyroscope:     false,
-    magnetometer:  false,
-    ai:            false,
-    nfc:           "NDEFReader" in window,
-    jack:          brandInfo.hasJackGuess,
-    brand:         brandInfo,
-  };
-
-  // Cámara
-  try {
-    const s = await navigator.mediaDevices.getUserMedia({ video: true });
-    caps.camera = true; s.getTracks().forEach(t => t.stop());
-  } catch(_e) {}
-
-  // Micrófono
-  try {
-    const s = await navigator.mediaDevices.getUserMedia({ audio: true });
-    caps.microphone = true; s.getTracks().forEach(t => t.stop());
-  } catch(_e) {}
-
-  // Acelerómetro + giroscopio + magnetómetro — escuchar 3s
-  await new Promise(resolve => {
-    const alphas = [];
-    const motionH = e => {
-      const ag = e.accelerationIncludingGravity;
-      if (ag && ag.x !== null) caps.accelerometer = true;
-      if (e.rotationRate?.alpha !== null) caps.gyroscope = true;
-    };
-    const oriH = e => {
-      if (e.alpha !== null && e.alpha !== undefined) alphas.push(e.alpha);
-    };
-    const absH = e => {
-      if (e.alpha !== null && e.alpha !== undefined && e.absolute) alphas.push(e.alpha + 1000);
-    };
-    window.addEventListener("devicemotion", motionH, true);
-    window.addEventListener("deviceorientation", oriH, true);
-    window.addEventListener("deviceorientationabsolute", absH, true);
-    setTimeout(() => {
-      window.removeEventListener("devicemotion", motionH, true);
-      window.removeEventListener("deviceorientation", oriH, true);
-      window.removeEventListener("deviceorientationabsolute", absH, true);
-      const hasAbs = alphas.some(a => a > 999);
-      const range  = alphas.length > 1
-        ? Math.max(...alphas.map(a => a > 999 ? a - 1000 : a)) -
-          Math.min(...alphas.map(a => a > 999 ? a - 1000 : a)) : 0;
-      caps.magnetometer = alphas.length > 0 && (hasAbs || range > 0.5);
-      resolve();
-    }, 3500);
-  });
-
-  // IA — verificar si hay key guardada
-  try {
-    const k = localStorage.getItem("sem_gemini_key");
-    caps.ai = !!k && k !== "SKIP";
-  } catch(_e) {}
-
-  return caps;
-}
-
 function Onboarding({ onDone }) {
   const [step,    setStep]    = useState(1); // 1=apikey, 2=sensors, 3=results
   const [key,     setKey]     = useState("");
@@ -2960,6 +2606,22 @@ function ToolSistema() {
           </div>
         ) : null;
       })()}
+      {/* Diagnóstico de hardware desde Sistema */}
+      <div style={{...glass(C.cyan,0.06),borderRadius:12,padding:"14px 16px",
+        border:`1px solid rgba(${rgb(C.cyan)},0.2)`}}>
+        <div style={{fontFamily:MONO,fontSize:9,color:C.cyan,fontWeight:700,
+          letterSpacing:2,marginBottom:10}}>DIAGNÓSTICO DE HARDWARE</div>
+        <div style={{fontFamily:MONO,fontSize:10,color:C.dim,lineHeight:1.7,marginBottom:10}}>
+          Re-ejecuta el test de sensores para actualizar la compatibilidad de herramientas.
+        </div>
+        <button style={{...S.btn("p",C.cyan)}} onClick={()=>{
+          try{localStorage.removeItem("sem_caps");}catch(_e){}
+          window.location.reload();
+        }}>
+          🔬 Re-ejecutar diagnóstico completo
+        </button>
+      </div>
+
       <div style={S.note}>
         La limpieza de caché elimina recursos guardados por SEM Tools (service worker). No borra datos del sistema ni de otras apps.
       </div>
@@ -3906,8 +3568,8 @@ function Home({onSel, caps}) {
           <div style={{fontFamily:MONO,fontSize:22,color:`rgba(${rgb(bl.col)},0.5)`}}>›</div>
         </button>
       ))}
-      <div style={{fontFamily:MONO,fontSize:8,color:C.dim,textAlign:"center",
-        letterSpacing:2,paddingTop:8}}>SEM TOOLS v2</div>
+      <div style={{fontFamily:MONO,fontSize:10,color:C.dim,textAlign:"center",
+        letterSpacing:1,paddingTop:8}}>SEM TOOLS · <span style={{color:C.amber}}>v{VERSION}</span></div>
     </div>
   );
 }
@@ -4171,6 +3833,25 @@ function getView(tool) {
   }
 }
 
+
+// ── Batería en tiempo real (sin DevicePanel) ──────────────────────────────────
+function BatteryDisplay() {
+  const [pct, setPct] = useState(null);
+  const [chg, setChg] = useState(false);
+  useEffect(() => {
+    navigator.getBattery?.().then(b => {
+      const update = () => { setPct(Math.round(b.level*100)); setChg(b.charging); };
+      update();
+      b.addEventListener("levelchange", update);
+      b.addEventListener("chargingchange", update);
+      return () => { b.removeEventListener("levelchange", update); b.removeEventListener("chargingchange", update); };
+    });
+  }, []);
+  if (pct === null) return null;
+  const col = chg ? C.green : pct > 40 ? C.dim : pct > 20 ? C.amber : C.red;
+  return <span style={{fontFamily:MONO,fontSize:8,color:col,fontWeight:700}}>{chg?"⚡":""}{pct}%</span>;
+}
+
 // ── Error Boundary ────────────────────────────────────────────────────────────
 class ErrorBoundary extends React.Component {
   constructor(props){ super(props); this.state={err:null}; }
@@ -4200,8 +3881,6 @@ class ErrorBoundary extends React.Component {
 
 function App() {
   const [tool,setTool]=useState(null);
-  const [devInfo,setDevInfo]=useState(null);
-  const [showDev,setShowDev]=useState(false);
   const [showOnboard,setShowOnboard]=useState(()=>{
     try{ const k=localStorage.getItem("sem_gemini_key"); return !k; }
     catch(_e){ return false; }
@@ -4213,8 +3892,6 @@ function App() {
   });
   const t=tool?TOOL[tool]:null;
   const col=t?.col||C.amber;
-
-  useEffect(()=>{ getDeviceInfo().then(setDevInfo); },[]);
 
   // Modo solar: inyectar estilos globales
   useEffect(()=>{
@@ -4239,13 +3916,9 @@ function App() {
     document.head.appendChild(l);
   },[]);
 
-  const batPct = devInfo?.bat ? Math.round(devInfo.bat.level*100) : null;
-  const batLow  = batPct !== null && batPct < 20 && !devInfo?.bat?.charging;
-
   return (
     <div style={S.app}>
       {showOnboard && <Onboarding onDone={c=>{setCaps(c);setShowOnboard(false);}}/>}
-      {showDev && <DevicePanel info={devInfo} onClose={()=>setShowDev(false)}/>}
       <div style={S.hdr}>
         {tool&&<button style={{border:"none",background:"none",color:col,fontFamily:MONO,fontSize:22,cursor:"pointer",padding:"0 8px 0 0",textShadow:`0 0 12px ${col}66`}} onClick={()=>setTool(null)}>←</button>}
         <div>
@@ -4253,12 +3926,12 @@ function App() {
             {t&&<ToolIcon id={tool} size={18} color={col} strokeWidth={2}/>}
             {t?t.label:"SEM Tools"}
           </div>
-          <div style={S.sub}>HERRAMIENTAS DE TALLER</div>
+          <div style={S.sub}>HERRAMIENTAS DE TALLER · v{VERSION}</div>
         </div>
         <div style={{flex:1}}/>
         <button style={{border:"none",background:"rgba(255,255,255,0.06)",borderRadius:8,padding:"6px 10px",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:2}} onClick={()=>setShowDev(true)}>
-          <span style={{fontSize:14,lineHeight:1}}>{batLow?"🔴":"📱"}</span>
-          {batPct!==null&&<span style={{fontFamily:MONO,fontSize:8,color:batLow?C.red:C.dim,fontWeight:700}}>{batPct}%</span>}
+          <span style={{fontSize:14,lineHeight:1}}>{""} </span>
+          <BatteryDisplay/>
         </button>
         {!showOnboard&&(
           <button style={{border:"none",background:"rgba(255,255,255,0.06)",borderRadius:8,
