@@ -2328,6 +2328,35 @@ function ToolRed() {
 
 
 
+
+// ── Detección de marca del dispositivo ───────────────────────────────────────
+function detectBrand() {
+  const ua = navigator.userAgent;
+  let brand = "Android", ui = "stock"; let hasJackGuess = true;
+  if (/iphone|ipad/i.test(ua))                    { brand="Apple";          ui="ios";     hasJackGuess=false; }
+  else if (/samsung|SM-[A-Z]/i.test(ua))          { brand="Samsung";        ui="oneui";   }
+  else if (/miui|xiaomi|redmi|poco/i.test(ua))    { brand="Xiaomi/Redmi";   ui="miui";    }
+  else if (/huawei|emui/i.test(ua))               { brand="Huawei";         ui="emui";    }
+  else if (/moto[a-z ]|motorola/i.test(ua))       { brand="Motorola";       ui="stock";   }
+  else if (/oneplus/i.test(ua))                   { brand="OnePlus";        ui="oxygen";  }
+  else if (/pixel/i.test(ua))                     { brand="Google Pixel";   ui="stock";   hasJackGuess=false; }
+  else if (/oppo|realme/i.test(ua))               { brand="OPPO/Realme";    ui="coloros"; }
+  const modelMatch = ua.match(/;\s*([^;)]+)\s*Build/) || ua.match(/;\s*([^;)]+)\)/);
+  const model   = modelMatch?.[1]?.trim().slice(0,35) || brand;
+  const osVer   = ua.match(/Android\s*([\d.]+)/)?.[1] || ua.match(/OS\s*([\d_]+)/)?.[1]?.replace(/_/g,".")||"?";
+  const os      = /iphone|ipad/i.test(ua)?"iOS":"Android";
+  const TIPS = {
+    miui:    ["⚙ Ajustes → Apps → Chrome → Permisos → habilitá todo","⚙ Ajustes → Batería → desactivar ahorro para Chrome","⚙ Bloqueá Chrome en Recientes para que no se cierre"],
+    oneui:   ["⚙ Ajustes → Privacidad → Administrador de permisos → revisar Chrome","⚙ Para NFC: Ajustes → Conexiones → NFC → Activar"],
+    emui:    ["⚙ Ajustes → Aplicaciones → Chrome → Permisos → habilitá sensores","⚙ Gestión de energía → Sin restricciones para Chrome"],
+    ios:     ["⚙ Ajustes → Chrome → Movimiento y orientación → Activar","⚙ iOS requiere permiso explícito para sensores de movimiento"],
+    oxygen:  ["⚙ OxygenOS generalmente sin restricciones — revisá permisos en Ajustes si algo falla"],
+    coloros: ["⚙ Ajustes → Batería → No optimizar → Chrome"],
+    stock:   ["⚙ Ajustes → Aplicaciones → Chrome → Permisos"],
+  };
+  return { brand, model, os, osVer, ui, hasJackGuess, tips: TIPS[ui]||TIPS.stock };
+}
+
 // ── Sistema / Optimización ────────────────────────────────────────────────────
 function ToolSistema() {
   const col = C.cyan;
