@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import ReactDOM from "react-dom/client";
+import { Volume2,Crosshair,Compass,Activity,Wrench,QrCode,Radio,Video,Camera,Cpu,Ruler,Thermometer,Wind,Zap,Sun,Plug,Settings,Settings2,Package,Package2,Signal,Search,Bluetooth,Globe,Wifi,MapPin,Network,Waves,FlaskConical,Layers,BarChart3,Smartphone,Database } from "lucide-react";
 
 // ── Service Worker ──────────────────────────────────────────────────────────
 if ('serviceWorker' in navigator) {
@@ -10,6 +11,48 @@ if ('serviceWorker' in navigator) {
 const rgb = hex => { if(!hex||typeof hex!=='string'||!hex.startsWith('#')) return '128,128,128'; return `${parseInt(hex.slice(1,3),16)},${parseInt(hex.slice(3,5),16)},${parseInt(hex.slice(5,7),16)}`; };
 const glow = (h,a=0.45) => h?`0 0 22px rgba(${rgb(h)},${a})`:'none';
 const glass = (h,a=0.06) => ({ background:`rgba(${rgb(h)},${a})`, backdropFilter:"blur(10px)", WebkitBackdropFilter:"blur(10px)" });
+
+
+// ── Sistema de íconos unificado ───────────────────────────────────────────────
+const ICON_MAP = {
+  decibeles:    Volume2,
+  nivel:        Crosshair,
+  brujula:      Compass,
+  oscilo:       Activity,
+  sistema:      Settings,
+  qr:           QrCode,
+  ir:           Radio,
+  endoscopio:   Video,
+  resistencias: FlaskConical,
+  integrados:   Cpu,
+  distancia:    Ruler,
+  jack_thermo:  Thermometer,
+  jack_thermo2: Layers,
+  jack_air:     Wind,
+  jack_volt:    Zap,
+  jack_light:   Sun,
+  jack_raw:     Waves,
+  red:          Wifi,
+  ping:         Activity,
+  lan:          Network,
+  http:         Globe,
+  ble:          Bluetooth,
+  ipinfo:       MapPin,
+  modulos:      Package,
+  tacometro:    Settings2,
+  // bloques
+  celular:      Smartphone,
+  camara:       Camera,
+  jack:         Plug,
+  celularplus:  Signal,
+  modulos_bl:   Package2,
+};
+
+function ToolIcon({ id, size=26, color, strokeWidth=1.6, style={} }) {
+  const Comp = ICON_MAP[id];
+  if (!Comp) return null;
+  return <Comp size={size} color={color||"currentColor"} strokeWidth={strokeWidth} style={style}/>;
+}
 
 // ── Tokens ────────────────────────────────────────────────────────────────────
 const C = {
@@ -53,7 +96,7 @@ const BLOCKS = [
   { id:"camara",   icon:"📷", label:"CÁMARA + IA", col:C.violet, tools:["resistencias","integrados","distancia","endoscopio"] },
   { id:"jack",     icon:"🔌", label:"JACK 3.5mm",  col:C.orange, tools:["jack_thermo","jack_thermo2","jack_air","jack_volt","jack_light","jack_raw"] },
   { id:"celularplus", icon:"📶", label:"CONECTIVIDAD", col:C.blue, tools:["red","ping","lan","http","ble","ipinfo"] },
-  { id:"modulos",  icon:"📡", label:"MÓDULOS",     col:C.green,  tools:["tacometro","modulos"] },
+  { id:"modulos",  icon:"📡", label:"MÓDULOS",     col:C.green,  tools:["modulos"] },
 ];
 
 // ── Styles ────────────────────────────────────────────────────────────────────
@@ -3617,9 +3660,12 @@ function Home({onSel, caps}) {
                   alignItems:"flex-start",minHeight:110,
                   cursor:(disabled||cantRun)?"default":"pointer"}}
                 onClick={()=>{ if(!disabled&&!cantRun) onSel(tid); }}>
-                <div style={{fontSize:30,marginBottom:6,
-                  filter:`drop-shadow(0 0 8px ${t.col}88)`}}>
-                  {cantRun?"🔒":t.icon}
+                <div style={{marginBottom:8,
+                  filter:cantRun?"none":`drop-shadow(0 0 8px ${t.col}88)`}}>
+                  {cantRun
+                    ? <ToolIcon id="sistema" size={28} color={C.dim} strokeWidth={1.4}/>
+                    : <ToolIcon id={tid} size={28} color={t.col} strokeWidth={1.4}/>
+                  }
                 </div>
                 <div style={{fontFamily:MONO,fontSize:13,fontWeight:700,
                   color:cantRun?C.dim:C.text,marginBottom:3}}>{t.label}</div>
@@ -3650,7 +3696,9 @@ function Home({onSel, caps}) {
           boxShadow:`0 2px 20px rgba(0,0,0,0.3)`,
           backdropFilter:"blur(10px)",textAlign:"left",width:"100%",
         }} onClick={()=>setSector(bl.id)}>
-          <div style={{fontSize:36,filter:`drop-shadow(0 0 12px ${bl.col}99)`}}>{bl.icon}</div>
+          <div style={{filter:`drop-shadow(0 0 12px ${bl.col}99)`}}>
+            <ToolIcon id={bl.id==="camara"?"camara":bl.id==="celularplus"?"celularplus":bl.id==="modulos"?"modulos_bl":bl.id} size={36} color={bl.col} strokeWidth={1.4}/>
+          </div>
           <div style={{flex:1}}>
             <div style={{fontFamily:MONO,fontSize:15,fontWeight:700,color:bl.col,
               textShadow:`0 0 14px ${bl.col}88`,letterSpacing:1,marginBottom:4}}>{bl.label}</div>
@@ -3785,7 +3833,10 @@ function App() {
       <div style={S.hdr}>
         {tool&&<button style={{border:"none",background:"none",color:col,fontFamily:MONO,fontSize:22,cursor:"pointer",padding:"0 8px 0 0",textShadow:`0 0 12px ${col}66`}} onClick={()=>setTool(null)}>←</button>}
         <div>
-          <div style={{...S.logo,color:col}}>{t?`${t.icon} ${t.label}`:"SEM Tools"}</div>
+          <div style={{...S.logo,color:col,display:"flex",alignItems:"center",gap:8}}>
+            {t&&<ToolIcon id={tool} size={18} color={col} strokeWidth={2}/>}
+            {t?t.label:"SEM Tools"}
+          </div>
           <div style={S.sub}>HERRAMIENTAS DE TALLER</div>
         </div>
         <div style={{flex:1}}/>
@@ -3818,7 +3869,10 @@ function App() {
           <span style={S.nl}>INICIO</span>
         </button>
         {tool&&<button style={{...S.nb(true,col),flex:3,alignItems:"flex-start",paddingLeft:16,pointerEvents:"none"}}>
-          <span style={{fontFamily:MONO,fontSize:11,color:col,textShadow:`0 0 8px ${col}`}}>{t?.icon} {t?.label}</span>
+          <div style={{display:"flex",alignItems:"center",gap:6}}>
+            <ToolIcon id={tool} size={14} color={col} strokeWidth={2}/>
+            <span style={{fontFamily:MONO,fontSize:11,color:col,textShadow:`0 0 8px ${col}`}}>{t?.label}</span>
+          </div>
           <span style={{...S.nl,color:C.dim}}>ACTIVO</span>
         </button>}
       </div>
