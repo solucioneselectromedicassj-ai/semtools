@@ -117,10 +117,15 @@ const S = {
 };
 
 // ── Claude API ────────────────────────────────────────────────────────────────
+function getUserKey() { try { return localStorage.getItem("sem_gemini_key")||""; } catch(_e){ return ""; } }
+
 async function askClaude(b64, prompt) {
+  const key = getUserKey();
+  if (!key) throw new Error("NO_KEY");
   const r = await fetch("/api/claude", {
-    method:"POST", headers:{"Content-Type":"application/json"},
-    body:JSON.stringify({ model:"claude-sonnet-4-6", max_tokens:1000,
+    method:"POST",
+    headers:{"Content-Type":"application/json", "x-user-key": key},
+    body:JSON.stringify({ model:"gemini-1.5-flash", max_tokens:1000,
       messages:[{ role:"user", content:[
         { type:"image", source:{ type:"base64", media_type:"image/jpeg", data:b64 } },
         { type:"text", text:prompt }
@@ -128,7 +133,11 @@ async function askClaude(b64, prompt) {
     })
   });
   const d = await r.json();
-  if (d.error) throw new Error(d.error.message);
+  if (d.error) {
+    if (d.error.message==="NO_KEY"||d.error.message==="INVALID_KEY")
+      throw new Error(d.error.message);
+    throw new Error(d.error.message);
+  }
   return d.content?.[0]?.text || "Sin respuesta";
 }
 
@@ -383,6 +392,153 @@ function DevicePanel({ info, onClose }) {
   );
 }
 
+
+// ── Onboarding — configuración de API key ────────────────────────────────────
+function Onboarding({ onDone }) {
+  const [key, setKey] = useState("");
+  const [step, setStep] = useState(1); // 1=intro, 2=pegar key, 3=listo
+  const [testing, setTesting] = useState(false);
+  const [err, setErr] = useState(null);
+
+  const testAndSave = async () => {
+    const k = key.trim();
+    if (!k.startsWith("AIza")) {
+      setErr("La key de Gemini empieza con 'AIza...' — verificá que copiaste bien");
+      return;
+    }
+    setTesting(true); setErr(null);
+    try {
+      // Test mínimo: texto simple sin imagen
+      const r = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${k}`,
+        { method:"POST", headers:{"Content-Type":"application/json"},
+          body: JSON.stringify({ contents:[{ parts:[{ text:"hola" }] }], generationConfig:{ maxOutputTokens:10 } })
+        }
+      );
+      const d = await r.json();
+      if (!r.ok) throw new Error(d?.error?.message || "Key inválida");
+      localStorage.setItem("sem_gemini_key", k);
+      setStep(3);
+    } catch(e) {
+      setErr("Key inválida o sin conexión: " + e.message);
+    }
+    setTesting(false);
+  };
+
+  const skip = () => { localStorage.setItem("sem_gemini_key","SKIP"); onDone(); };
+
+  if (step === 3) return (
+    <div style={{ position:"fixed", inset:0, background:"linear-gradient(170deg,#0D1829 0%,#152240 100%)",
+                  display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center",
+                  padding:24, zIndex:200 }}>
+      <div style={{ fontSize:64, marginBottom:16, filter:"drop-shadow(0 0 20px #00EF88)" }}>✓</div>
+      <div style={{ fontFamily:MONO, fontSize:20, fontWeight:700, color:C.green,
+                    textShadow:`0 0 20px ${C.green}`, marginBottom:8 }}>¡Todo listo!</div>
+      <div style={{ fontFamily:MONO, fontSize:11, color:C.dim, textAlign:"center", lineHeight:1.8, marginBottom:32 }}>
+        Tu API key de Gemini está guardada en este dispositivo.{"\n"}
+        Podés analizar resistencias e integrados IC.
+      </div>
+      <button style={{ ...S.btn("p", C.green), maxWidth:280 }} onClick={onDone}>
+        Entrar a SEM Tools →
+      </button>
+    </div>
+  );
+
+  return (
+    <div style={{ position:"fixed", inset:0, background:"linear-gradient(170deg,#0D1829 0%,#152240 100%)",
+                  overflowY:"auto", zIndex:200, display:"flex", flexDirection:"column" }}>
+      <div style={{ padding:"32px 20px 24px", display:"flex", flexDirection:"column", gap:20, maxWidth:480, margin:"0 auto", width:"100%" }}>
+
+        {/* Logo */}
+        <div style={{ textAlign:"center", paddingTop:16 }}>
+          <div style={{ fontFamily:MONO, fontSize:28, fontWeight:700, color:C.amber,
+                        textShadow:`0 0 24px ${C.amber}` }}>SEM Tools</div>
+          <div style={{ fontFamily:MONO, fontSize:10, color:C.dim, letterSpacing:2, marginTop:4 }}>
+            CONFIGURACIÓN INICIAL
+          </div>
+        </div>
+
+        {/* Herramientas de IA */}
+        <div style={{ ...glass(C.violet, 0.08), borderRadius:14, padding:18,
+                      border:`1px solid rgba(${rgb(C.violet)},0.25)` }}>
+          <div style={{ fontFamily:MONO, fontSize:11, fontWeight:700, color:C.violet, marginBottom:12 }}>
+            🤖 HERRAMIENTAS CON INTELIGENCIA ARTIFICIAL
+          </div>
+          {["Identificador de Resistencias — foto → valor Ω",
+            "Identificador de Integrados IC — foto → datasheet",
+            "Medidor de Distancia con IA"].map((t,i) => (
+            <div key={i} style={{ fontFamily:MONO, fontSize:10, color:C.dim, lineHeight:1.9 }}>
+              <span style={{ color:C.violet }}>▸ </span>{t}
+            </div>
+          ))}
+          <div style={{ fontFamily:MONO, fontSize:10, color:C.dim, marginTop:12, lineHeight:1.7,
+                        background:"rgba(255,255,255,0.03)", borderRadius:8, padding:"8px 10px" }}>
+            Estas herramientas usan Google Gemini para analizar imágenes.
+            Necesitás una key gratuita de Google — la cuota gratis es más que suficiente para uso de taller.
+          </div>
+        </div>
+
+        {/* Pasos */}
+        {[
+          { n:"1", icon:"🌐", title:"Abrí Google AI Studio",
+            desc:"Tocá el botón. Se abre aistudio.google.com en el navegador.",
+            action: <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer"
+              style={{ ...S.btn("p", C.blue), display:"block", textAlign:"center",
+                       textDecoration:"none", fontFamily:MONO, fontSize:12, fontWeight:700 }}>
+              Abrir Google AI Studio →
+            </a>
+          },
+          { n:"2", icon:"🔑", title:'Tocá "Get API key" → "Create API key"',
+            desc:"Elegí cualquier proyecto o creá uno nuevo. Copiá la key que empieza con AIza..." },
+          { n:"3", icon:"📋", title:"Pegá tu key acá abajo",
+            desc:"La key queda guardada solo en tu celular. Nadie más la ve." },
+        ].map(({ n, icon, title, desc, action }) => (
+          <div key={n} style={{ display:"flex", gap:14, alignItems:"flex-start" }}>
+            <div style={{ width:32, height:32, borderRadius:"50%", background:`rgba(${rgb(C.cyan)},0.15)`,
+                          border:`1px solid rgba(${rgb(C.cyan)},0.4)`, display:"flex", alignItems:"center",
+                          justifyContent:"center", fontFamily:MONO, fontSize:14, fontWeight:700,
+                          color:C.cyan, flexShrink:0 }}>{n}</div>
+            <div style={{ flex:1 }}>
+              <div style={{ fontFamily:MONO, fontSize:11, fontWeight:700, color:C.text, marginBottom:4 }}>
+                {icon} {title}
+              </div>
+              <div style={{ fontFamily:MONO, fontSize:10, color:C.dim, lineHeight:1.7, marginBottom:action?10:0 }}>
+                {desc}
+              </div>
+              {action}
+            </div>
+          </div>
+        ))}
+
+        {/* Input de key */}
+        <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+          <input
+            style={{ ...S.inp, fontSize:12, letterSpacing:.5 }}
+            placeholder="AIzaSy... (pegá tu key acá)"
+            value={key}
+            onChange={e => { setKey(e.target.value); setErr(null); }}
+          />
+          {err && <div style={{ fontFamily:MONO, fontSize:10, color:C.red, lineHeight:1.6 }}>{err}</div>}
+          <button style={{ ...S.btn("p", C.green), opacity: testing ? 0.7 : 1 }}
+            onClick={testing ? null : testAndSave}>
+            {testing ? "Verificando…" : "✓ Guardar y verificar key"}
+          </button>
+        </div>
+
+        {/* Saltar */}
+        <div style={{ textAlign:"center", paddingBottom:24 }}>
+          <button style={{ border:"none", background:"none", color:C.dim,
+                           fontFamily:MONO, fontSize:10, cursor:"pointer", textDecoration:"underline" }}
+            onClick={skip}>
+            Saltar por ahora — usar solo herramientas sin IA
+          </button>
+        </div>
+
+      </div>
+    </div>
+  );
+}
+
 // ── Resistencias ──────────────────────────────────────────────────────────────
 function ToolResistencias() {
   const col=C.violet;
@@ -391,7 +547,7 @@ function ToolResistencias() {
     setLoading(true); setResult(null);
     try{ setResult(await askClaude(b64,
       "Analizá esta resistencia. Respondé exactamente:\nBANDAS: [colores]\nVALOR: [ej: 4.7 kΩ]\nTOLERANCIA: [±%]\nTIPO: [4 o 5 bandas]\nSi no hay resistencia: SIN COMPONENTE"));
-    } catch(e){ setResult("⚠ "+e.message); }
+    } catch(e){ setResult(e.message==="NO_KEY"?"🔑 Configurá tu API key de Gemini (botón 🔑 arriba)":e.message==="INVALID_KEY"?"🔑 API key inválida — tocá 🔑 para reconfigurar":"⚠ "+e.message); }
     setLoading(false);
   };
   return (
@@ -415,7 +571,7 @@ function ToolIntegrado() {
     setLoading(true); setResult(null);
     try{ setResult(await askClaude(b64,
       "Analizá este IC/integrado.\nMARKING: [texto en chip]\nCOMPONENTE: [nombre]\nFUNCIÓN: [breve]\nENCAPSULADO: [tipo y pines]\nCÓMO PROBARLO:\n[pasos para técnico]\nEQUIVALENTE: [si existe]\nSi no hay componente: SIN COMPONENTE"));
-    } catch(e){ setResult("⚠ "+e.message); }
+    } catch(e){ setResult(e.message==="NO_KEY"?"🔑 Configurá tu API key de Gemini (botón 🔑 arriba)":e.message==="INVALID_KEY"?"🔑 API key inválida — tocá 🔑 para reconfigurar":"⚠ "+e.message); }
     setLoading(false);
   };
   return (
@@ -2001,6 +2157,10 @@ function App() {
   const [tool,setTool]=useState(null);
   const [devInfo,setDevInfo]=useState(null);
   const [showDev,setShowDev]=useState(false);
+  const [showOnboard,setShowOnboard]=useState(()=>{
+    try{ const k=localStorage.getItem("sem_gemini_key"); return !k; }
+    catch(_e){ return false; }
+  });
   const t=tool?TOOL[tool]:null;
   const col=t?.col||C.amber;
 
@@ -2017,6 +2177,7 @@ function App() {
 
   return (
     <div style={S.app}>
+      {showOnboard && <Onboarding onDone={()=>setShowOnboard(false)}/>}
       {showDev && <DevicePanel info={devInfo} onClose={()=>setShowDev(false)}/>}
       <div style={S.hdr}>
         {tool&&<button style={{border:"none",background:"none",color:col,fontFamily:MONO,fontSize:22,cursor:"pointer",padding:"0 8px 0 0",textShadow:`0 0 12px ${col}66`}} onClick={()=>setTool(null)}>←</button>}
@@ -2029,6 +2190,13 @@ function App() {
           <span style={{fontSize:14,lineHeight:1}}>{batLow?"🔴":"📱"}</span>
           {batPct!==null&&<span style={{fontFamily:MONO,fontSize:8,color:batLow?C.red:C.dim,fontWeight:700}}>{batPct}%</span>}
         </button>
+        {!showOnboard&&(
+          <button style={{border:"none",background:"rgba(255,255,255,0.06)",borderRadius:8,
+            padding:"6px 8px",cursor:"pointer",fontFamily:MONO,fontSize:9,color:C.dim}}
+            onClick={()=>setShowOnboard(true)}>
+            🔑
+          </button>
+        )}
       </div>
       <div style={S.body}>
         {tool===null?<Home onSel={setTool}/>:getView(tool)}
