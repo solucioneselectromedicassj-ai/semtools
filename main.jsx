@@ -3860,7 +3860,7 @@ class ErrorBoundary extends React.Component {
     if(this.state.err) return (
       <div style={{padding:20,background:"#0D1829",minHeight:"100vh",color:"#E2E8FF",fontFamily:"monospace"}}>
         <div style={{color:"#FF3355",fontWeight:700,fontSize:14,marginBottom:12}}>
-          ⚠ Error — mandá esta info a soporte:
+          ⚠ Error v{VERSION} — mandá esta info:
         </div>
         <div style={{background:"rgba(255,51,85,0.1)",borderRadius:8,padding:12,
           fontSize:11,lineHeight:1.8,wordBreak:"break-all",whiteSpace:"pre-wrap",
@@ -3947,7 +3947,7 @@ function App() {
         </button>
       </div>
       <div style={S.body}>
-        {tool===null?<Home onSel={setTool} caps={caps}/>:<ErrorBoundary key={tool}>{getView(tool)}</ErrorBoundary>}
+        {tool===null?<ErrorBoundary key="home"><Home onSel={setTool} caps={caps}/></ErrorBoundary>:<ErrorBoundary key={tool}>{getView(tool)}</ErrorBoundary>}
       </div>
       <div style={S.nav}>
         <button style={S.nb(tool===null,C.amber)} onClick={()=>setTool(null)}>
