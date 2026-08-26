@@ -3929,10 +3929,7 @@ function App() {
           <div style={S.sub}>HERRAMIENTAS DE TALLER · v{VERSION}</div>
         </div>
         <div style={{flex:1}}/>
-        <button style={{border:"none",background:"rgba(255,255,255,0.06)",borderRadius:8,padding:"6px 10px",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:2}} onClick={()=>setShowDev(true)}>
-          <span style={{fontSize:14,lineHeight:1}}>{""} </span>
-          <BatteryDisplay/>
-        </button>
+        
         {!showOnboard&&(
           <button style={{border:"none",background:"rgba(255,255,255,0.06)",borderRadius:8,
             padding:"6px 8px",cursor:"pointer",fontFamily:MONO,fontSize:9,color:C.dim}}
