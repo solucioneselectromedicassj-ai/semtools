@@ -3711,8 +3711,17 @@ function Home({onSel, caps}) {
             <div style={{fontFamily:MONO,fontSize:15,fontWeight:700,color:bl.col,
               textShadow:`0 0 14px ${bl.col}88`,letterSpacing:1,marginBottom:4}}>{bl.label}</div>
             <div style={{fontFamily:MONO,fontSize:11,color:C.dim,lineHeight:1.6}}>
-              {bl.tools.map(tid=>TOOL[tid]?.icon).filter(Boolean).join("  ")}
-              {" · "}{bl.tools.length} herramienta{bl.tools.length>1?"s":""}
+              <div style={{display:"flex",alignItems:"center",gap:5,flexWrap:"wrap"}}>
+                {bl.tools.slice(0,6).map(tid=>
+                  SVG_PATHS[tid]
+                    ? <ToolIcon key={tid} id={tid} size={13} color={`rgba(${rgb(bl.col)},0.6)`} strokeWidth={1.9}/>
+                    : null
+                )}
+                {bl.tools.length>6&&<span style={{fontSize:9,color:C.dim}}>+{bl.tools.length-6}</span>}
+                <span style={{fontSize:9,color:`rgba(${rgb(bl.col)},0.5)`,marginLeft:2}}>
+                  · {bl.tools.length} herramienta{bl.tools.length>1?"s":""}
+                </span>
+              </div>
             </div>
           </div>
           <div style={{fontFamily:MONO,fontSize:22,color:`rgba(${rgb(bl.col)},0.5)`}}>›</div>
