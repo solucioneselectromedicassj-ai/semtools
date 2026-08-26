@@ -50,7 +50,7 @@ export default async function handler(req) {
   const models = await listModels(key);
 
   // Filtrar modelos que soporten generateContent (y visión si hay imagen)
-  const preferred = ['gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-1.5-flash', 'gemini-1.5-pro'];
+  const preferred = ['gemini-3.6-flash', 'gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-1.5-flash', 'gemini-1.5-pro'];
   let chosen = null, chosenVer = 'v1beta';
 
   if (models.length > 0) {
@@ -68,7 +68,7 @@ export default async function handler(req) {
 
   // Fallback si listModels falló
   if (!chosen) {
-    for (const [ver, model] of [['v1beta','gemini-2.0-flash'],['v1','gemini-2.0-flash'],['v1beta','gemini-1.5-flash-latest']]) {
+    for (const [ver, model] of [['v1beta','gemini-3.6-flash'],['v1beta','gemini-2.5-flash'],['v1beta','gemini-2.0-flash'],['v1','gemini-2.0-flash'],['v1beta','gemini-1.5-flash-latest']]) {
       try {
         const { r, d } = await generateContent(model, ver, [{ text: 'test' }], key);
         if (r.ok) { chosen = model; chosenVer = ver; break; }
