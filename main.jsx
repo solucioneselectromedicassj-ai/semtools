@@ -25,6 +25,7 @@ const TOOL = {
   nivel:        { icon:"⦿",  label:"Nivel",           sub:"Burbuja 2D · horizonte · auto-start",  col:C.cyan   },
   brujula:      { icon:"🧭", label:"Brújula",         sub:"Magnetómetro · rumbo · auto-start",    col:C.cyan   },
   sistema:      { icon:"🔧", label:"Sistema",         sub:"Limpieza · benchmark · optimización",   col:C.cyan   },
+  ir:           { icon:"📡", label:"Control Remoto",  sub:"Detector IR · LAN · módulo TX",         col:C.violet },
   oscilo:       { icon:"〜", label:"Osciloscopio",    sub:"Audio · FFT · captura automática",     col:C.cyan   },
   resistencias: { icon:"🔴", label:"Resistencias",    sub:"Cámara + IA → valor Ω",               col:C.violet },
   integrados:   { icon:"◻",  label:"Integrados IC",   sub:"Cámara + IA → ID + cómo probarlo",    col:C.violet },
@@ -41,7 +42,7 @@ const TOOL = {
 };
 
 const BLOCKS = [
-  { id:"celular",  icon:"📱", label:"CELULAR",     col:C.cyan,   tools:["decibeles","nivel","brujula","oscilo","sistema"] },
+  { id:"celular",  icon:"📱", label:"CELULAR",     col:C.cyan,   tools:["decibeles","nivel","brujula","oscilo","sistema","ir"] },
   { id:"camara",   icon:"📷", label:"CÁMARA + IA", col:C.violet, tools:["resistencias","integrados","distancia"] },
   { id:"jack",     icon:"🔌", label:"JACK 3.5mm",  col:C.orange, tools:["jack_thermo","jack_thermo2","jack_air","jack_volt","jack_light","jack_raw"] },
   { id:"celularplus", icon:"📶", label:"CONECTIVIDAD", col:C.blue, tools:["red"] },
@@ -170,15 +171,37 @@ function CameraView({ captureLabel="📷 Capturar", onCapture }) {
 
   useEffect(()=>()=>stop(),[stop]);
 
+  const [grid,setGrid]=useState(false);
   return (
     <>
-      <video ref={vRef} style={S.vid} playsInline muted/>
+      <div style={{position:"relative",borderRadius:10,overflow:"hidden",border:`1px solid ${C.bord}`}}>
+        <video ref={vRef} style={{...S.vid,border:"none",borderRadius:0}} playsInline muted/>
+        {/* Grilla de encuadre */}
+        {grid && on && (
+          <div style={{position:"absolute",inset:0,pointerEvents:"none"}}>
+            {[1,2].map(i=>(
+              <div key={"v"+i} style={{position:"absolute",top:0,bottom:0,left:`${i*33.33}%`,width:1,background:"rgba(255,255,255,0.35)"}}/>
+            ))}
+            {[1,2].map(i=>(
+              <div key={"h"+i} style={{position:"absolute",left:0,right:0,top:`${i*33.33}%`,height:1,background:"rgba(255,255,255,0.35)"}}/>
+            ))}
+            {/* Centro */}
+            <div style={{position:"absolute",top:"50%",left:"50%",width:20,height:20,
+              marginTop:-10,marginLeft:-10,border:"1px solid rgba(255,255,255,0.6)",borderRadius:"50%"}}/>
+          </div>
+        )}
+      </div>
       <canvas ref={cRef} style={{display:"none"}}/>
       {err&&<div style={{color:C.red,fontFamily:MONO,fontSize:11}}>{err}</div>}
       <div style={S.row}>
         <button style={{...S.btn(on?"s":"p",C.violet),flex:on?0.5:1}} onClick={()=>on?stop():start()}>
           {on?"Apagar":"Activar cámara"}
         </button>
+        {on&&(
+          <button style={{...S.btn("s"),flex:.4,background:grid?"rgba(14,165,233,0.25)":"rgba(255,255,255,0.07)",
+            color:grid?C.cyan:C.text,border:grid?`1px solid ${C.cyan}`:"none"}}
+            onClick={()=>setGrid(g=>!g)}>⊞</button>
+        )}
         {torchOk&&on&&(
           <button style={{...S.btn("s"),flex:.4,background:torch?C.amber:"rgba(255,255,255,0.07)",
             color:torch?"#000":C.text}} onClick={toggleTorch}>🔦{torch?" ON":" OFF"}</button>
@@ -764,7 +787,7 @@ function ToolDecibeles() {
 // ── Nivel ── auto-start Android ───────────────────────────────────────────────
 function ToolNivel() {
   const col=C.cyan;
-  const [model,setModel]=useState("bubble");
+  const [model,setModel]=useState("bubble");  // bubble | horizon | regla
   const [ang,setAng]=useState({b:0,g:0}), [on,setOn]=useState(false), [err,setErr]=useState(null);
   const [hasData,setHasData]=useState(false);
   const hRef=useRef(null);
@@ -814,8 +837,8 @@ function ToolNivel() {
     <div style={S.wrap}>
       <div style={S.st(col)}>▸ Nivel Digital</div>
       <div style={S.row}>
-        {[["bubble","🔵 Burbuja"],["horizon","📐 Horizonte"]].map(([md,l])=>(
-          <button key={md} style={{...S.btn(model===md?"p":"s",col),flex:1,fontSize:11}}
+        {[["bubble","🔵 Burbuja"],["horizon","📐 Horizonte"],["regla","📏 Regla"]].map(([md,l])=>(
+          <button key={md} style={{...S.btn(model===md?"p":"s",col),flex:1,fontSize:10}}
             onClick={()=>setModel(md)}>{l}</button>
         ))}
       </div>
@@ -859,6 +882,50 @@ function ToolNivel() {
         </div>
       )}
 
+      {/* Regla: nivel de burbuja lineal horizontal */}
+      {model==="regla" && (
+        <div style={{...S.disp(col),padding:"24px 20px",display:"flex",flexDirection:"column",gap:16}}>
+          {/* Tubo horizontal */}
+          <div style={{position:"relative",height:52,borderRadius:26,
+            border:`2px solid rgba(${rgb(col)},0.4)`,background:"rgba(0,0,0,0.8)",overflow:"hidden"}}>
+            {/* Graduaciones */}
+            {Array.from({length:21}).map((_,i)=>{
+              const center=i===10, major=i%5===0;
+              return (
+                <div key={i} style={{position:"absolute",
+                  top:center?0:major?8:16,bottom:center?0:major?8:16,
+                  left:`${i/20*100}%`,width:center?2:1,
+                  background:`rgba(${rgb(col)},${center?0.7:major?0.4:0.2})`}}/>
+              );
+            })}
+            {/* Zona de nivel OK */}
+            <div style={{position:"absolute",top:8,bottom:8,left:"calc(50% - 15px)",width:30,
+              borderRadius:4,border:`1px solid rgba(${rgb(col)},0.3)`,
+              background:`rgba(${rgb(col)},0.06)`}}/>
+            {/* Burbuja */}
+            <div style={{
+              position:"absolute",top:"50%",transform:"translateY(-50%)",
+              left:`calc(${Math.min(Math.max(50+gx*2.8,8),92)}% - 20px)`,
+              width:40,height:40,borderRadius:"50%",transition:"left .08s ease-out",
+              background:flat?`radial-gradient(circle at 35% 35%,${col}CC,${col}55)`:`radial-gradient(circle at 35% 35%,${C.blue}CC,${C.blue}44)`,
+              border:`2px solid ${flat?col:C.blue}`,
+              boxShadow:flat?`0 0 20px ${col}`:`0 0 10px ${C.blue}55`
+            }}/>
+          </div>
+          {/* Escala */}
+          <div style={{display:"flex",justifyContent:"space-between",fontFamily:MONO,fontSize:9,color:C.dim,paddingInline:4}}>
+            {["-10°","-5°","0°","+5°","+10°"].map(l=><span key={l}>{l}</span>)}
+          </div>
+          {/* Lectura vertical también */}
+          <div style={{...S.disp(C.blue),textAlign:"center",padding:"10px 16px"}}>
+            <div style={{fontFamily:MONO,fontSize:9,color:C.dim}}>INCLINACIÓN ADELANTE/ATRÁS</div>
+            <div style={{fontFamily:MONO,fontSize:22,fontWeight:700,color:C.blue,textShadow:`0 0 12px ${C.blue}`}}>
+              {gy.toFixed(1)}°
+            </div>
+          </div>
+        </div>
+      )}
+
       <div style={S.row}>
         <div style={{...S.disp(col),flex:1,textAlign:"center"}}>
           <div style={{fontFamily:MONO,fontSize:28,fontWeight:700,color:col,textShadow:`0 0 14px ${col}`}}>{gx.toFixed(1)}°</div>
@@ -887,55 +954,105 @@ function ToolNivel() {
 function ToolBrujula() {
   const col=C.cyan;
   const [hdg,setHdg]=useState(null), [on,setOn]=useState(false), [err,setErr]=useState(null);
-  const hRef=useRef(null), needsPerm=typeof DeviceOrientationEvent?.requestPermission==="function";
+  const [method,setMethod]=useState(null); // "abs-sensor"|"abs-event"|"ios"
+  const refs=useRef({});
 
   const cardinal=deg=>{
     const d=((deg%360)+360)%360;
-    const cards=["N","NE","E","SE","S","SO","O","NO"];
-    return cards[Math.round(d/45)%8];
+    return ["N","NE","E","SE","S","SO","O","NO"][Math.round(d/45)%8];
   };
 
   const startListener=()=>{
-    let gotAbs=false;
-    const hAbs=e=>{ if(e.alpha==null) return; gotAbs=true; setHdg((360-e.alpha+360)%360); };
-    const hRel=e=>{ if(gotAbs) return; if(e.webkitCompassHeading!=null) setHdg(e.webkitCompassHeading); };
-    hRef.current={abs:hAbs,rel:hRel};
+    let gotData=false;
+
+    // Método 1: AbsoluteOrientationSensor (Generic Sensor API — más preciso)
+    if('AbsoluteOrientationSensor' in window){
+      try {
+        const sensor=new AbsoluteOrientationSensor({frequency:20,referenceFrame:"screen"});
+        sensor.addEventListener('reading',()=>{
+          const q=sensor.quaternion; // [x,y,z,w]
+          // Convertir quaternion a heading (yaw)
+          const heading=Math.atan2(2*(q[0]*q[3]+q[1]*q[2]),1-2*(q[2]*q[2]+q[3]*q[3]))*180/Math.PI;
+          setHdg(((heading%360)+360)%360);
+          gotData=true; setMethod("abs-sensor");
+        });
+        sensor.addEventListener('error',e2=>console.warn("AbsOriSensor:",e2.error.name));
+        sensor.start();
+        refs.current.sensor=sensor;
+      } catch(_e){ /* fallback */ }
+    }
+
+    // Método 2: deviceorientationabsolute (Android Chrome)
+    const hAbs=e=>{
+      if(gotData&&method==="abs-sensor") return;
+      if(e.alpha==null) return;
+      gotData=true; setMethod("abs-event");
+      setHdg((360-e.alpha+360)%360);
+    };
+
+    // Método 3: iOS webkitCompassHeading
+    const hRel=e=>{
+      if(gotData) return;
+      if(e.webkitCompassHeading!=null){
+        gotData=true; setMethod("ios");
+        setHdg(e.webkitCompassHeading);
+      }
+    };
+
+    refs.current.hAbs=hAbs; refs.current.hRel=hRel;
     window.addEventListener("deviceorientationabsolute",hAbs,true);
     window.addEventListener("deviceorientation",hRel,true);
     setOn(true); setErr(null);
-    setTimeout(()=>setHdg(p=>{ if(p===null) setErr("Sin datos — mové el celular en figura 8"); return p; }),5000);
+
+    setTimeout(()=>setHdg(p=>{
+      if(p===null) setErr("Sin datos de magnetómetro. Mové el celular en figura 8 y esperá. Si no funciona, este dispositivo puede no tener magnetómetro activo.");
+      return p;
+    }),6000);
   };
-    const start=async()=>{
-    if(needsPerm){
+
+  const start=async()=>{
+    if(typeof DeviceOrientationEvent?.requestPermission==="function"){
       try{ const p=await DeviceOrientationEvent.requestPermission(); if(p!=="granted"){setErr("Permiso denegado");return;} }
       catch(e){ setErr(e.message); return; }
+    }
+    if('AbsoluteOrientationSensor' in window){
+      try{ await Promise.all([navigator.permissions.query({name:"accelerometer"}),
+                               navigator.permissions.query({name:"magnetometer"}),
+                               navigator.permissions.query({name:"gyroscope"})]); }
+      catch(_e){}
     }
     startListener();
   };
 
   const stop=()=>{
-    if(hRef.current){
-      window.removeEventListener("deviceorientationabsolute",hRef.current?.abs||hRef.current,true);
-      window.removeEventListener("deviceorientation",hRef.current?.rel||hRef.current,true);
-    }
-    setOn(false); setHdg(null);
+    refs.current.sensor?.stop();
+    window.removeEventListener("deviceorientationabsolute",refs.current.hAbs,true);
+    window.removeEventListener("deviceorientation",refs.current.hRel,true);
+    setOn(false); setHdg(null); setMethod(null);
   };
 
   useEffect(()=>{
-    if(!needsPerm){ startListener(); return ()=>{ if(hRef.current){ window.removeEventListener("deviceorientationabsolute",hRef.current,true); window.removeEventListener("deviceorientation",hRef.current,true); } }; }
+    if(typeof DeviceOrientationEvent?.requestPermission!=="function"){ startListener(); }
+    return ()=>{
+      refs.current.sensor?.stop();
+      window.removeEventListener("deviceorientationabsolute",refs.current.hAbs,true);
+      window.removeEventListener("deviceorientation",refs.current.hRel,true);
+    };
   },[]);
 
   const deg=hdg!==null?Math.round(hdg):null;
-  const card=deg!==null?cardinal(deg):"--";
 
   return (
     <div style={S.wrap}>
       <div style={S.st(col)}>▸ Brújula Digital</div>
-      {/* Rosa */}
+      {method&&<div style={{...S.pill(C.green),textAlign:"center",fontSize:9}}>
+        Método: {method==="abs-sensor"?"AbsoluteOrientationSensor (óptimo)":method==="abs-event"?"deviceorientationabsolute":"iOS webkitCompassHeading"}
+      </div>}
+
+      {/* Rosa de los vientos */}
       <div style={{...S.disp(col),display:"flex",justifyContent:"center",padding:20}}>
         <div style={{position:"relative",width:180,height:180}}>
           <div style={{position:"absolute",inset:0,borderRadius:"50%",border:`2px solid rgba(${rgb(col)},0.25)`,background:"rgba(0,0,0,0.6)"}}/>
-          {/* Marcas cardinales fijas */}
           {[["N",0],["E",90],["S",180],["O",270]].map(([l,a])=>(
             <div key={l} style={{position:"absolute",width:"100%",height:"100%",transform:`rotate(${a}deg)`}}>
               <div style={{position:"absolute",top:8,left:"50%",transform:"translateX(-50%)",
@@ -943,20 +1060,18 @@ function ToolBrujula() {
                 color:l==="N"?C.red:col,textShadow:l==="N"?`0 0 8px ${C.red}`:`0 0 8px ${col}`}}>{l}</div>
             </div>
           ))}
-          {/* Aguja giratoria */}
           <div style={{position:"absolute",inset:0,display:"flex",justifyContent:"center",alignItems:"center",
             transform:`rotate(${deg??0}deg)`,transition:"transform .2s ease-out"}}>
             <div style={{position:"relative",width:4,height:140}}>
-              <div style={{position:"absolute",top:0,left:0,right:0,height:"50%",background:C.red,borderRadius:"2px 2px 0 0",
-                boxShadow:`0 0 10px ${C.red}`}}/>
+              <div style={{position:"absolute",top:0,left:0,right:0,height:"50%",background:C.red,borderRadius:"2px 2px 0 0",boxShadow:`0 0 10px ${C.red}`}}/>
               <div style={{position:"absolute",bottom:0,left:0,right:0,height:"50%",background:col,borderRadius:"0 0 2px 2px"}}/>
             </div>
           </div>
-          {/* Centro */}
           <div style={{position:"absolute",top:"50%",left:"50%",width:12,height:12,marginTop:-6,marginLeft:-6,
             borderRadius:"50%",background:C.amber,boxShadow:`0 0 10px ${C.amber}`}}/>
         </div>
       </div>
+
       <div style={S.row}>
         <div style={{...S.disp(col),flex:2,textAlign:"center"}}>
           <div style={{fontFamily:MONO,fontSize:48,fontWeight:700,color:col,textShadow:`0 0 20px ${col}`,lineHeight:1}}>
@@ -966,15 +1081,24 @@ function ToolBrujula() {
         </div>
         <div style={{...S.disp(C.amber),flex:1,textAlign:"center"}}>
           <div style={{fontFamily:MONO,fontSize:36,fontWeight:700,color:C.amber,textShadow:`0 0 16px ${C.amber}`,lineHeight:1}}>
-            {card}
+            {deg!==null?cardinal(deg):"--"}
           </div>
           <div style={S.dlbl}>CARDINAL</div>
         </div>
       </div>
-      {err&&<div style={{color:C.red,fontFamily:MONO,fontSize:11,lineHeight:1.6}}>{err}</div>}
-      {needsPerm&&!on&&<button style={S.btn("p",col)} onClick={start}>Activar brújula</button>}
-      {on&&needsPerm&&<button style={S.btn("r")} onClick={stop}>Detener</button>}
-      <div style={S.note}>Mantené el celular horizontal y alejado de metales. La aguja roja apunta al norte magnético.</div>
+
+      {err&&<div style={{color:C.amber,fontFamily:MONO,fontSize:10,lineHeight:1.7,
+        background:"rgba(255,184,48,0.08)",borderRadius:8,padding:"8px 12px"}}>{err}</div>}
+      {!on&&typeof DeviceOrientationEvent?.requestPermission==="function"&&(
+        <button style={S.btn("p",col)} onClick={start}>Activar brújula</button>
+      )}
+      {on&&typeof DeviceOrientationEvent?.requestPermission==="function"&&(
+        <button style={S.btn("r")} onClick={stop}>Detener</button>
+      )}
+      <div style={S.note}>
+        Alejá el celular de metales y electrónica. Calibrá moviendolo en figura 8.
+        La aguja roja → Norte magnético.
+      </div>
     </div>
   );
 }
@@ -1070,26 +1194,35 @@ function ToolOscilo() {
             :<><button style={{...S.btn("r"),flex:1}} onClick={stop}>Detener</button>
                <button style={{...S.btn("s"),flex:.5,fontSize:11}} onClick={snap}>📸 Snap</button></>}
       </div>
+      {/* Capturas en sección fija — no mueve el canvas */}
       {snaps.length>0&&(
-        <div style={S.res(col)}>
-          <div style={{fontFamily:MONO,fontSize:9,color:col,marginBottom:8,fontWeight:700}}>CAPTURAS</div>
-          <div style={{display:"flex",flexDirection:"column",gap:10}}>
+        <div style={{...S.res(col),maxHeight:180,overflow:"hidden"}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+            <div style={{fontFamily:MONO,fontSize:9,color:col,fontWeight:700}}>
+              CAPTURAS ({snaps.length})
+            </div>
+            <button style={{...S.btn("s"),width:"auto",padding:"4px 10px",fontSize:10}}
+              onClick={()=>setSnaps([])}>Borrar</button>
+          </div>
+          <div style={{display:"flex",gap:8,overflowX:"auto",paddingBottom:4}}>
             {snaps.map((s,i)=>(
-              <div key={i} style={{display:"flex",gap:10,alignItems:"center"}}>
-                <img src={s.img} alt="snap" style={{width:100,borderRadius:6,border:`1px solid rgba(${rgb(col)},0.3)`}}/>
-                <div>
-                  <div style={{fontFamily:MONO,fontSize:14,color:col,fontWeight:700}}>{s.freq} Hz</div>
-                  <div style={{fontFamily:MONO,fontSize:9,color:C.dim}}>{s.auto?"⚡ auto · ":""}{s.ts}</div>
+              <div key={i} style={{flex:"0 0 auto",display:"flex",flexDirection:"column",alignItems:"center",gap:4}}>
+                <img src={s.img} alt="snap" style={{width:90,borderRadius:6,
+                  border:`1px solid rgba(${rgb(col)},0.4)`,display:"block"}}/>
+                <div style={{fontFamily:MONO,fontSize:10,color:col,fontWeight:700,textAlign:"center"}}>
+                  {s.freq} Hz
+                </div>
+                <div style={{display:"flex",gap:6,alignItems:"center"}}>
+                  {s.auto&&<span style={S.pill(C.amber)}>auto</span>}
                   <a href={s.img} download={`osc_${s.ts.replace(/:/g,"-")}.png`}
-                    style={{fontFamily:MONO,fontSize:9,color:C.blue}}>⬇ Descargar</a>
+                    style={{fontFamily:MONO,fontSize:9,color:C.blue}}>⬇</a>
                 </div>
               </div>
             ))}
-            <button style={{...S.btn("s"),fontSize:10}} onClick={()=>setSnaps([])}>Borrar capturas</button>
           </div>
         </div>
       )}
-      <div style={S.note}>Resolución ~5 Hz · Auto-snap captura picos de amplitud automáticamente · Manual con 📸</div>
+      <div style={S.note}>Resolución ~5 Hz · Auto-snap captura picos · 📸 manual · Capturas en scroll horizontal</div>
     </div>
   );
 }
@@ -1592,6 +1725,181 @@ function ToolModulos() {
   );
 }
 
+
+// ── Control Remoto IR — detector por cámara + LAN ─────────────────────────────
+function ToolIR() {
+  const col = C.violet;
+  const vRef=useRef(), cRef=useRef(), rafRef=useRef(), stRef=useRef();
+  const [on,setOn]=useState(false), [err,setErr]=useState(null);
+  const [pulses,setPulses]=useState(0), [lastPulse,setLastPulse]=useState(null);
+  const [scanning,setScanning]=useState(false), [lanDevices,setLanDevices]=useState([]);
+  const prevBright=useRef(0);
+
+  const start=async()=>{
+    try{
+      const s=await navigator.mediaDevices.getUserMedia({video:{facingMode:"environment",width:{ideal:640}}});
+      stRef.current=s; vRef.current.srcObject=s; await vRef.current.play();
+      setOn(true); setErr(null);
+      const c=cRef.current;
+      const analyze=()=>{
+        if(!vRef.current||!c) return;
+        c.width=160; c.height=120; // baja resolución para velocidad
+        const ctx=c.getContext("2d");
+        ctx.drawImage(vRef.current,0,0,160,120);
+        const data=ctx.getImageData(0,0,160,120).data;
+        // Buscar pixels muy brillantes (IR LED aparece como blanco/violeta)
+        let bright=0;
+        for(let i=0;i<data.length;i+=4){
+          if(data[i]>220&&data[i+1]>200&&data[i+2]>200) bright++;
+        }
+        const threshold=30;
+        if(bright>threshold&&prevBright.current<=threshold){
+          // Flanco ascendente: pulso detectado
+          setPulses(p=>p+1);
+          setLastPulse(new Date().toLocaleTimeString());
+        }
+        prevBright.current=bright;
+        rafRef.current=requestAnimationFrame(analyze);
+      };
+      rafRef.current=requestAnimationFrame(analyze);
+    } catch(e){ setErr("Sin cámara: "+e.message); }
+  };
+
+  const stop=()=>{
+    cancelAnimationFrame(rafRef.current);
+    stRef.current?.getTracks().forEach(t=>t.stop());
+    if(vRef.current) vRef.current.srcObject=null;
+    setOn(false);
+  };
+
+  // Scanner LAN: prueba IPs comunes de smart TVs y dispositivos IR/WiFi
+  const scanLAN=async()=>{
+    setScanning(true); setLanDevices([]);
+    const found=[];
+    // Detectar gateway estimado del celular
+    const targets=[
+      {ip:"192.168.1.1",   name:"Router / Gateway"},
+      {ip:"192.168.0.1",   name:"Router / Gateway"},
+      {ip:"192.168.1.100", name:"Posible Smart TV"},
+      {ip:"192.168.1.101", name:"Posible Smart TV"},
+      {ip:"192.168.0.100", name:"Posible Smart TV"},
+      {ip:"192.168.1.200", name:"Broadlink RM / IR Bridge"},
+    ];
+    await Promise.allSettled(targets.map(async t=>{
+      try{
+        const ctrl=new AbortController();
+        const to=setTimeout(()=>ctrl.abort(),1500);
+        await fetch(`http://${t.ip}`,{mode:"no-cors",signal:ctrl.signal});
+        clearTimeout(to);
+        found.push({...t,ok:true});
+      } catch(_e){
+        // Si aborta por timeout → no responde. Si da error de red → puede estar ahí
+        if(_e.name!=="AbortError") found.push({...t,ok:true,note:"posible"});
+      }
+    }));
+    setLanDevices(found);
+    setScanning(false);
+  };
+
+  useEffect(()=>()=>{ cancelAnimationFrame(rafRef.current); stRef.current?.getTracks().forEach(t=>t.stop()); },[]);
+
+  return (
+    <div style={S.wrap}>
+      <div style={S.st(col)}>▸ Control Remoto IR</div>
+
+      {/* Detector IR por cámara */}
+      <div style={{...S.disp(col),padding:"14px 16px"}}>
+        <div style={{fontFamily:MONO,fontSize:9,color:col,fontWeight:700,marginBottom:10,letterSpacing:2}}>
+          DETECTOR IR POR CÁMARA
+        </div>
+        <div style={{fontFamily:MONO,fontSize:10,color:C.dim,lineHeight:1.7,marginBottom:12}}>
+          Apuntá un control remoto a la cámara trasera y presioná un botón. La cámara detecta el destello del LED infrarrojo (invisible al ojo pero visible al sensor).
+        </div>
+        <div style={{position:"relative",borderRadius:8,overflow:"hidden",marginBottom:10}}>
+          <video ref={vRef} style={{...S.vid,border:"none",borderRadius:0,maxHeight:150}} playsInline muted/>
+          {pulses>0&&(
+            <div style={{position:"absolute",top:8,right:8,background:`rgba(${rgb(col)},0.9)`,
+              borderRadius:20,padding:"4px 12px",fontFamily:MONO,fontSize:12,color:"#fff",fontWeight:700}}>
+              ⚡ IR detectado
+            </div>
+          )}
+        </div>
+        <canvas ref={cRef} style={{display:"none"}}/>
+        <div style={S.row}>
+          <div style={{...S.disp(C.red),flex:1,textAlign:"center",padding:"10px 8px"}}>
+            <div style={{fontFamily:MONO,fontSize:9,color:C.dim}}>PULSOS</div>
+            <div style={{fontFamily:MONO,fontSize:28,fontWeight:700,color:C.red,textShadow:`0 0 12px ${C.red}`}}>{pulses}</div>
+          </div>
+          <div style={{...S.disp(col),flex:2,textAlign:"center",padding:"10px 8px"}}>
+            <div style={{fontFamily:MONO,fontSize:9,color:C.dim}}>ÚLTIMO PULSO</div>
+            <div style={{fontFamily:MONO,fontSize:14,fontWeight:700,color:col}}>{lastPulse||"---"}</div>
+          </div>
+          <button style={{...S.btn("s"),flex:.5,padding:"8px 4px",fontSize:11}}
+            onClick={()=>{setPulses(0);setLastPulse(null);}}>Reset</button>
+        </div>
+        {!on
+          ?<button style={S.btn("p",col)} onClick={start}>Activar detector IR</button>
+          :<button style={S.btn("r")} onClick={stop}>Detener</button>
+        }
+      </div>
+
+      {/* Scanner LAN */}
+      <div style={{...S.disp(C.blue),padding:"14px 16px"}}>
+        <div style={{fontFamily:MONO,fontSize:9,color:C.blue,fontWeight:700,marginBottom:8,letterSpacing:2}}>
+          SCANNER RED LOCAL (LAN)
+        </div>
+        <div style={{fontFamily:MONO,fontSize:10,color:C.dim,lineHeight:1.7,marginBottom:10}}>
+          Busca Smart TVs, IR bridges (Broadlink RM) y otros dispositivos controlables por WiFi en tu red.
+        </div>
+        <button style={{...S.btn("p",C.blue),opacity:scanning?.7:1}} onClick={scanning?null:scanLAN}>
+          {scanning?"Escaneando red…":"🔍 Escanear dispositivos en la red"}
+        </button>
+        {lanDevices.length>0&&(
+          <div style={{marginTop:10,display:"flex",flexDirection:"column",gap:6}}>
+            {lanDevices.map((d,i)=>(
+              <div key={i} style={{display:"flex",justifyContent:"space-between",padding:"8px 10px",
+                background:"rgba(77,158,255,0.07)",borderRadius:8,border:`1px solid rgba(${rgb(C.blue)},0.2)`}}>
+                <div>
+                  <div style={{fontFamily:MONO,fontSize:11,color:C.text,fontWeight:700}}>{d.name}</div>
+                  <div style={{fontFamily:MONO,fontSize:9,color:C.dim}}>{d.ip}{d.note?" · "+d.note:""}</div>
+                </div>
+                <span style={S.pill(d.ok?C.green:C.dim)}>{d.ok?"Encontrado":"?"}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Módulo externo para control */}
+      <div style={{...glass(C.green,0.06),borderRadius:12,padding:"14px 16px",
+        border:`1px solid rgba(${rgb(C.green)},0.2)`}}>
+        <div style={{fontFamily:MONO,fontSize:9,color:C.green,fontWeight:700,marginBottom:8,letterSpacing:2}}>
+          MÓDULO IR TX — EMISIÓN DE SEÑALES
+        </div>
+        <div style={{fontFamily:MONO,fontSize:10,color:C.dim,lineHeight:1.8,marginBottom:10}}>
+          Para controlar dispositivos (TV, aires, equipos) se necesita un LED IR emisor.
+          El módulo SEM IR-TX conecta por USB-C y permite enviar cualquier código IR de las bases de datos de Pronto/LIRC.
+        </div>
+        <div style={{display:"flex",flexDirection:"column",gap:6}}>
+          {["LED IR 940nm + driver","Base de datos LIRC + Pronto","Control por marca/modelo","Aprendizaje de códigos desconocidos","Interfaz USB-C OTG"].map((f,i)=>(
+            <div key={i} style={{fontFamily:MONO,fontSize:10,color:C.dim}}>
+              <span style={{color:C.green}}>▸ </span>{f}
+            </div>
+          ))}
+        </div>
+        <div style={{...S.pill(C.amber),marginTop:12,textAlign:"center",fontSize:10,padding:"6px 14px"}}>
+          En desarrollo · Precio estimado ARS 8.000
+        </div>
+      </div>
+
+      <div style={S.note}>
+        La cámara detecta IR pero no puede decodificar el protocolo completo — para eso se necesita hardware.
+        El detector sirve para verificar si un control remoto funciona sin necesitar un TV cerca.
+      </div>
+    </div>
+  );
+}
+
 // ── Módulo placeholder ────────────────────────────────────────────────────────
 function ModulePlaceholder({icon,title,why,when}) {
   return (
@@ -1674,6 +1982,7 @@ function getView(tool) {
     case "oscilo":       return <ToolOscilo key={tool}/>;
     case "red":          return <ToolRed key={tool}/>;
     case "sistema":      return <ToolSistema key={tool}/>;
+    case "ir":           return <ToolIR key={tool}/>;
     case "modulos":      return <ToolModulos key={tool}/>;
     case "jack_thermo":  return <ToolJackSensor key={tool} modId="jack_thermo"/>;
     case "jack_thermo2": return <ToolJackSensor key={tool} modId="jack_thermo2"/>;
