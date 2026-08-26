@@ -25,6 +25,7 @@ const TOOL = {
   nivel:        { icon:"⦿",  label:"Nivel",           sub:"Burbuja 2D · horizonte · auto-start",  col:C.cyan   },
   brujula:      { icon:"🧭", label:"Brújula",         sub:"Magnetómetro · rumbo · auto-start",    col:C.cyan   },
   sistema:      { icon:"🔧", label:"Sistema",         sub:"Limpieza · benchmark · optimización",   col:C.cyan   },
+  qr:           { icon:"⬛", label:"QR / Código Barras",sub:"Leer · generar · historial",           col:C.green  },
   ir:           { icon:"📡", label:"Control Remoto",  sub:"Detector IR · LAN · módulo TX",         col:C.violet },
   oscilo:       { icon:"〜", label:"Osciloscopio",    sub:"Audio · FFT · captura automática",     col:C.cyan   },
   resistencias: { icon:"🔴", label:"Resistencias",    sub:"Cámara + IA → valor Ω",               col:C.violet },
@@ -42,7 +43,7 @@ const TOOL = {
 };
 
 const BLOCKS = [
-  { id:"celular",  icon:"📱", label:"CELULAR",     col:C.cyan,   tools:["decibeles","nivel","brujula","oscilo","sistema","ir"] },
+  { id:"celular",  icon:"📱", label:"CELULAR",     col:C.cyan,   tools:["decibeles","nivel","brujula","oscilo","sistema","qr","ir"] },
   { id:"camara",   icon:"📷", label:"CÁMARA + IA", col:C.violet, tools:["resistencias","integrados","distancia"] },
   { id:"jack",     icon:"🔌", label:"JACK 3.5mm",  col:C.orange, tools:["jack_thermo","jack_thermo2","jack_air","jack_volt","jack_light","jack_raw"] },
   { id:"celularplus", icon:"📶", label:"CONECTIVIDAD", col:C.blue, tools:["red"] },
@@ -1893,6 +1894,252 @@ function ToolModulos() {
 }
 
 
+
+// ── Lector + Generador de QR ──────────────────────────────────────────────────
+function ToolQR() {
+  const col = C.green;
+  const vRef=useRef(), cRef=useRef(), rafRef=useRef(), stRef=useRef(), detRef=useRef(null);
+  const [on,     setOn]     = useState(false);
+  const [mode,   setMode]   = useState("read"); // "read" | "gen"
+  const [result, setResult] = useState(null);
+  const [err,    setErr]    = useState(null);
+  const [found,  setFound]  = useState(false);
+  const [genTxt, setGenTxt] = useState("");
+  const [history,setHistory]= useState([]);
+  const [copied, setCopied] = useState(false);
+
+  // ── Iniciar cámara + detector ──────────────────────────────────────────────
+  const start = async () => {
+    try {
+      const s = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode:"environment", width:{ ideal:1280 }, height:{ ideal:720 } }
+      });
+      stRef.current = s;
+      vRef.current.srcObject = s;
+      await vRef.current.play();
+
+      // BarcodeDetector nativo (Chrome Android / Chrome desktop)
+      if ("BarcodeDetector" in window) {
+        try {
+          const fmts = await BarcodeDetector.getSupportedFormats();
+          detRef.current = new BarcodeDetector({
+            formats: fmts.filter(f => ["qr_code","ean_13","ean_8","code_128","code_39","upc_a","upc_e","data_matrix","pdf417"].includes(f))
+          });
+        } catch(_e) {
+          detRef.current = new BarcodeDetector({ formats:["qr_code"] });
+        }
+        setOn(true); setErr(null); setFound(false); setResult(null);
+        const scan = async () => {
+          if (!vRef.current || !detRef.current) return;
+          try {
+            const codes = await detRef.current.detect(vRef.current);
+            if (codes.length > 0) {
+              const c = codes[0];
+              setResult(c);
+              setFound(true);
+              setHistory(h => [{ value:c.rawValue, format:c.format, ts:new Date().toLocaleTimeString() },
+                               ...h.filter(x=>x.value!==c.rawValue).slice(0,9)]);
+              // Vibrar al detectar
+              navigator.vibrate?.(100);
+              setTimeout(() => { setFound(false); rafRef.current = requestAnimationFrame(scan); }, 2000);
+              return;
+            }
+          } catch(_e) {}
+          rafRef.current = requestAnimationFrame(scan);
+        };
+        rafRef.current = requestAnimationFrame(scan);
+      } else {
+        setOn(true);
+        setErr("BarcodeDetector no disponible — actualizá Chrome a la versión más reciente");
+      }
+    } catch(e) { setErr("Sin cámara: " + e.message); }
+  };
+
+  const stop = () => {
+    cancelAnimationFrame(rafRef.current);
+    stRef.current?.getTracks().forEach(t => t.stop());
+    if (vRef.current) vRef.current.srcObject = null;
+    setOn(false); setFound(false);
+  };
+
+  const copy = (text) => {
+    navigator.clipboard?.writeText(text).then(() => { setCopied(true); setTimeout(()=>setCopied(false), 2000); });
+  };
+
+  const isURL = (s) => /^https?:\/\//i.test(s);
+
+  useEffect(() => () => {
+    cancelAnimationFrame(rafRef.current);
+    stRef.current?.getTracks().forEach(t => t.stop());
+  }, []);
+
+  // URL del QR generado
+  const qrUrl = genTxt.trim()
+    ? `https://api.qrserver.com/v1/create-qr-code/?size=280x280&format=png&data=${encodeURIComponent(genTxt.trim())}`
+    : null;
+
+  return (
+    <div style={S.wrap}>
+      <div style={S.st(col)}>▸ QR / Código de Barras</div>
+
+      {/* Tabs */}
+      <div style={S.row}>
+        {[["read","📷 Leer"],["gen","⚡ Generar"]].map(([m,l])=>(
+          <button key={m} style={{...S.btn(mode===m?"p":"s",col),flex:1,fontSize:12}}
+            onClick={()=>{ setMode(m); if(on) stop(); setResult(null); }}>
+            {l}
+          </button>
+        ))}
+      </div>
+
+      {/* ── MODO LEER ─────────────────────────────────────────────────────── */}
+      {mode==="read" && (
+        <>
+          {/* Visor de cámara con overlay */}
+          <div style={{ position:"relative", borderRadius:12, overflow:"hidden",
+                        border:`2px solid ${found ? C.green : `rgba(${rgb(col)},0.3)`}`,
+                        transition:"border-color .3s",
+                        boxShadow: found ? `0 0 20px ${C.green}88` : "none" }}>
+            <video ref={vRef} style={{...S.vid, border:"none", borderRadius:0, maxHeight:260}}
+              playsInline muted/>
+            {/* Marco de escaneo */}
+            {on && !found && (
+              <div style={{ position:"absolute", inset:0, display:"flex",
+                            justifyContent:"center", alignItems:"center", pointerEvents:"none" }}>
+                <div style={{ width:200, height:200, position:"relative" }}>
+                  {[["0","0"],["auto","0"],["0","auto"],["auto","auto"]].map(([t,l],i)=>(
+                    <div key={i} style={{
+                      position:"absolute",
+                      top:t, bottom:t==="auto"?"0":undefined,
+                      left:l, right:l==="auto"?"0":undefined,
+                      width:28, height:28,
+                      borderTop: t==="0"?`3px solid ${col}`:undefined,
+                      borderBottom: t==="auto"?`3px solid ${col}`:undefined,
+                      borderLeft: l==="0"?`3px solid ${col}`:undefined,
+                      borderRight: l==="auto"?`3px solid ${col}`:undefined,
+                      boxShadow:`0 0 8px ${col}66`,
+                    }}/>
+                  ))}
+                </div>
+              </div>
+            )}
+            {/* Flash de detección */}
+            {found && (
+              <div style={{ position:"absolute", inset:0,
+                            background:`rgba(${rgb(C.green)},0.2)`,
+                            display:"flex", alignItems:"center", justifyContent:"center" }}>
+                <div style={{ fontFamily:MONO, fontSize:32,
+                              filter:`drop-shadow(0 0 12px ${C.green})` }}>✓</div>
+              </div>
+            )}
+          </div>
+          <canvas ref={cRef} style={{ display:"none" }}/>
+
+          {err && <div style={{ color:C.amber, fontFamily:MONO, fontSize:10, lineHeight:1.7,
+                                background:`rgba(${rgb(C.amber)},0.08)`, borderRadius:8, padding:"8px 12px" }}>{err}</div>}
+
+          <div style={S.row}>
+            {!on
+              ? <button style={{...S.btn("p",col),flex:1}} onClick={start}>Activar escáner</button>
+              : <button style={{...S.btn("r"),flex:1}} onClick={stop}>Detener</button>
+            }
+          </div>
+
+          {/* Resultado */}
+          {result && (
+            <div style={{...S.disp(C.green), display:"flex", flexDirection:"column", gap:10}}>
+              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+                <span style={S.pill(col)}>{result.format?.replace("_"," ").toUpperCase()}</span>
+                <span style={{ fontFamily:MONO, fontSize:9, color:C.dim }}>{new Date().toLocaleTimeString()}</span>
+              </div>
+              <div style={{ fontFamily:MONO, fontSize:13, color:C.text, wordBreak:"break-all",
+                            lineHeight:1.6 }}>{result.rawValue}</div>
+              <div style={S.row}>
+                <button style={{...S.btn("p",col),flex:1,fontSize:11}}
+                  onClick={()=>copy(result.rawValue)}>
+                  {copied?"✓ Copiado":"📋 Copiar"}
+                </button>
+                {isURL(result.rawValue) && (
+                  <a href={result.rawValue} target="_blank" rel="noreferrer"
+                    style={{...S.btn("p",C.blue),flex:1,fontSize:11,textDecoration:"none",
+                            textAlign:"center",display:"flex",alignItems:"center",justifyContent:"center"}}>
+                    🌐 Abrir
+                  </a>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Historial */}
+          {history.length>0 && (
+            <div style={S.res(col)}>
+              <div style={{fontFamily:MONO,fontSize:9,color:col,fontWeight:700,marginBottom:8}}>
+                HISTORIAL ({history.length})
+              </div>
+              {history.map((h,i)=>(
+                <div key={i} style={{display:"flex",alignItems:"center",gap:8,
+                  padding:"7px 0",borderBottom:i<history.length-1?`1px solid ${C.bord}`:"none"}}>
+                  <span style={S.pill(col)}>{h.format?.replace("_"," ")}</span>
+                  <div style={{flex:1,fontFamily:MONO,fontSize:10,color:C.text,
+                    overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{h.value}</div>
+                  <button style={{border:"none",background:"none",color:C.blue,
+                    fontFamily:MONO,fontSize:10,cursor:"pointer",flexShrink:0}}
+                    onClick={()=>copy(h.value)}>📋</button>
+                </div>
+              ))}
+              <button style={{...S.btn("s"),marginTop:8,fontSize:10}}
+                onClick={()=>setHistory([])}>Borrar historial</button>
+            </div>
+          )}
+
+          <div style={S.note}>
+            Detecta QR, EAN-13, Code 128, Code 39, UPC y más. Vibra al detectar.
+            Requiere Chrome actualizado.
+          </div>
+        </>
+      )}
+
+      {/* ── MODO GENERAR ──────────────────────────────────────────────────── */}
+      {mode==="gen" && (
+        <>
+          <div style={S.note}>Escribí el texto, URL o dato que querés convertir en QR.</div>
+          <textarea
+            style={{...S.inp, minHeight:90, resize:"vertical", lineHeight:1.6}}
+            placeholder="Texto, URL, número de teléfono, email..."
+            value={genTxt}
+            onChange={e=>setGenTxt(e.target.value)}
+          />
+          {qrUrl && (
+            <div style={{...S.disp(col), display:"flex", flexDirection:"column",
+                         alignItems:"center", gap:12, padding:20}}>
+              <img src={qrUrl} alt="QR generado"
+                style={{width:220,height:220,borderRadius:8,background:"#fff",padding:8}}/>
+              <div style={{fontFamily:MONO,fontSize:10,color:C.dim,textAlign:"center",
+                wordBreak:"break-all"}}>{genTxt.slice(0,60)}{genTxt.length>60?"…":""}</div>
+              <div style={S.row}>
+                <button style={{...S.btn("p",col),flex:1,fontSize:11}}
+                  onClick={()=>copy(genTxt)}>📋 Copiar texto</button>
+                <a href={qrUrl} download="qr-semtools.png" target="_blank" rel="noreferrer"
+                  style={{...S.btn("p",C.blue),flex:1,fontSize:11,textDecoration:"none",
+                          textAlign:"center",display:"flex",alignItems:"center",justifyContent:"center"}}>
+                  ⬇ Guardar QR
+                </a>
+              </div>
+            </div>
+          )}
+          {!qrUrl && (
+            <div style={{...S.disp(col),display:"flex",alignItems:"center",justifyContent:"center",
+              minHeight:120,opacity:.4}}>
+              <div style={{fontFamily:MONO,fontSize:12,color:C.dim}}>El QR aparece mientras escribís</div>
+            </div>
+          )}
+          <div style={S.note}>El QR se genera al instante. Podés guardarlo como imagen.</div>
+        </>
+      )}
+    </div>
+  );
+}
+
 // ── Control Remoto IR — detector por cámara + LAN ─────────────────────────────
 function ToolIR() {
   const col = C.violet;
@@ -2149,6 +2396,7 @@ function getView(tool) {
     case "oscilo":       return <ToolOscilo key={tool}/>;
     case "red":          return <ToolRed key={tool}/>;
     case "sistema":      return <ToolSistema key={tool}/>;
+    case "qr":           return <ToolQR key={tool}/>;
     case "ir":           return <ToolIR key={tool}/>;
     case "modulos":      return <ToolModulos key={tool}/>;
     case "jack_thermo":  return <ToolJackSensor key={tool} modId="jack_thermo"/>;
