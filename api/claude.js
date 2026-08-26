@@ -1,20 +1,19 @@
-// api/claude.js — Proxy Gemini con auto-detección de modelo
+// api/claude.js — Proxy Gemini
 export const config = { runtime: 'edge' };
 const CORS = { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' };
 
-async function listModels(key) {
-  // Probar v1beta y v1
-  for (const ver of ['v1beta', 'v1']) {
-    try {
-      const r = await fetch(`https://generativelanguage.googleapis.com/${ver}/models?key=${key}`);
-      const d = await r.json();
-      if (r.ok && d.models) return d.models;
-    } catch(_e) {}
-  }
-  return [];
-}
+// Modelos en orden de preferencia — el primero disponible gana
+const MODELS_TO_TRY = [
+  ['v1beta', 'gemini-3.6-flash'],
+  ['v1beta', 'gemini-3.5-flash'],
+  ['v1beta', 'gemini-2.5-flash-latest'],
+  ['v1beta', 'gemini-2.0-flash'],
+  ['v1',     'gemini-2.0-flash'],
+  ['v1beta', 'gemini-2.0-flash-lite'],
+  ['v1beta', 'gemini-1.5-flash-latest'],
+];
 
-async function generateContent(model, ver, parts, key) {
+async function callGemini(ver, model, parts, key) {
   const url = `https://generativelanguage.googleapis.com/${ver}/models/${model}:generateContent?key=${key}`;
   const r = await fetch(url, {
     method: 'POST',
@@ -24,11 +23,14 @@ async function generateContent(model, ver, parts, key) {
       generationConfig: { maxOutputTokens: 1000, temperature: 0.3 },
     }),
   });
-  return { r, d: await r.json() };
+  const d = await r.json();
+  return { ok: r.ok, status: r.status, data: d };
 }
 
 export default async function handler(req) {
-  if (req.method === 'OPTIONS') return new Response(null, { headers: { ...CORS, 'Access-Control-Allow-Methods': 'POST', 'Access-Control-Allow-Headers': 'Content-Type, x-user-key' } });
+  if (req.method === 'OPTIONS') return new Response(null, {
+    headers: { ...CORS, 'Access-Control-Allow-Methods': 'POST', 'Access-Control-Allow-Headers': 'Content-Type, x-user-key' }
+  });
   if (req.method !== 'POST') return new Response('Method not allowed', { status: 405 });
 
   const key = req.headers.get('x-user-key') || process.env.ANTHROPIC_API_KEY || '';
@@ -36,58 +38,38 @@ export default async function handler(req) {
 
   const body = await req.json();
 
-  // Convertir partes
+  // Convertir formato Anthropic → Gemini parts
   const parts = [];
   for (const msg of body.messages || []) {
-    for (const block of (Array.isArray(msg.content) ? msg.content : [{ type:'text', text: msg.content }])) {
+    for (const block of (Array.isArray(msg.content) ? msg.content : [{ type: 'text', text: msg.content }])) {
       if (block.type === 'image') parts.push({ inlineData: { mimeType: block.source.media_type, data: block.source.data } });
       else if (block.type === 'text') parts.push({ text: block.text });
     }
   }
 
-  // Auto-detectar modelo disponible
-  const hasImage = parts.some(p => p.inlineData);
-  const models = await listModels(key);
+  // Probar cada modelo hasta que uno funcione
+  let lastErr = 'No hay modelos Gemini disponibles';
+  for (const [ver, model] of MODELS_TO_TRY) {
+    const { ok, status, data } = await callGemini(ver, model, parts, key);
 
-  // Filtrar modelos que soporten generateContent (y visión si hay imagen)
-  const preferred = ['gemini-3.6-flash', 'gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-1.5-flash', 'gemini-1.5-pro'];
-  let chosen = null, chosenVer = 'v1beta';
+    if (ok) {
+      // Verificar que la respuesta no sea el mensaje de deprecación
+      const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+      if (text.includes('no longer available') || text.includes('please update your code')) {
+        // Modelo deprecated — probar el siguiente
+        lastErr = `${model} deprecado`;
+        continue;
+      }
+      return new Response(JSON.stringify({ content: [{ type: 'text', text: text || 'Sin respuesta' }] }), { headers: CORS });
+    }
 
-  if (models.length > 0) {
-    // Usar modelos listados, preferir los conocidos
-    for (const pref of preferred) {
-      const found = models.find(m => m.name?.includes(pref) && m.supportedGenerationMethods?.includes('generateContent'));
-      if (found) { chosen = found.name.replace('models/', ''); chosenVer = 'v1beta'; break; }
+    const errMsg = data?.error?.message || '';
+    if (errMsg.includes('API_KEY_INVALID') || errMsg.includes('API key not valid') || status === 400) {
+      return new Response(JSON.stringify({ error: { message: 'INVALID_KEY' } }), { status: 401, headers: CORS });
     }
-    // Si ninguno preferido, usar el primero que soporte generateContent
-    if (!chosen) {
-      const first = models.find(m => m.supportedGenerationMethods?.includes('generateContent'));
-      if (first) { chosen = first.name.replace('models/', ''); }
-    }
+    // Modelo no disponible → probar siguiente
+    lastErr = errMsg || `${model} no disponible`;
   }
 
-  // Fallback si listModels falló
-  if (!chosen) {
-    for (const [ver, model] of [['v1beta','gemini-3.6-flash'],['v1beta','gemini-2.5-flash'],['v1beta','gemini-2.0-flash'],['v1','gemini-2.0-flash'],['v1beta','gemini-1.5-flash-latest']]) {
-      try {
-        const { r, d } = await generateContent(model, ver, [{ text: 'test' }], key);
-        if (r.ok) { chosen = model; chosenVer = ver; break; }
-        const msg = d?.error?.message || '';
-        if (msg.includes('API_KEY_INVALID') || msg.includes('API key not valid'))
-          return new Response(JSON.stringify({ error: { message: 'INVALID_KEY' } }), { status: 401, headers: CORS });
-      } catch(_e) {}
-    }
-  }
-
-  if (!chosen) return new Response(JSON.stringify({ error: { message: 'No se encontró un modelo Gemini disponible para tu key. Verificá que la API de Gemini esté habilitada en tu proyecto de Google.' } }), { status: 500, headers: CORS });
-
-  const { r, d } = await generateContent(chosen, chosenVer, parts, key);
-  if (!r.ok) {
-    const msg = d?.error?.message || 'Error de Gemini';
-    if (msg.includes('API_KEY_INVALID')) return new Response(JSON.stringify({ error: { message: 'INVALID_KEY' } }), { status: 401, headers: CORS });
-    return new Response(JSON.stringify({ error: { message: msg } }), { status: r.status, headers: CORS });
-  }
-
-  const text = d?.candidates?.[0]?.content?.parts?.[0]?.text || 'Sin respuesta';
-  return new Response(JSON.stringify({ content: [{ type: 'text', text }] }), { headers: CORS });
+  return new Response(JSON.stringify({ error: { message: lastErr } }), { status: 500, headers: CORS });
 }
