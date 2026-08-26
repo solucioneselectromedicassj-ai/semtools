@@ -409,14 +409,27 @@ function Onboarding({ onDone }) {
     setTesting(true); setErr(null);
     try {
       // Test mínimo: texto simple sin imagen
-      const r = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${k}`,
-        { method:"POST", headers:{"Content-Type":"application/json"},
-          body: JSON.stringify({ contents:[{ parts:[{ text:"hola" }] }], generationConfig:{ maxOutputTokens:10 } })
-        }
-      );
-      const d = await r.json();
-      if (!r.ok) throw new Error(d?.error?.message || "Key inválida");
+      // Probar modelos en orden hasta que uno funcione
+      const models = ["gemini-2.0-flash","gemini-2.0-flash-lite","gemini-1.5-flash-latest","gemini-1.5-flash"];
+      let ok = false, lastErr = "Key inválida";
+      for (const model of models) {
+        try {
+          const r = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${k}`,
+            { method:"POST", headers:{"Content-Type":"application/json"},
+              body: JSON.stringify({ contents:[{ parts:[{ text:"hola" }] }], generationConfig:{ maxOutputTokens:10 } })
+            }
+          );
+          const d = await r.json();
+          if (r.ok) { ok = true; break; }
+          const msg = d?.error?.message || "";
+          if (msg.includes("API_KEY_INVALID") || msg.includes("API key not valid")) {
+            throw new Error("Key inválida — verificá que copiaste bien toda la key");
+          }
+          lastErr = msg; // modelo no disponible, probar el siguiente
+        } catch(e2) { if(e2.message.includes("inválida")) throw e2; lastErr = e2.message; }
+      }
+      if (!ok) throw new Error(lastErr);
       localStorage.setItem("sem_gemini_key", k);
       setStep(3);
     } catch(e) {
