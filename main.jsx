@@ -402,8 +402,8 @@ function Onboarding({ onDone }) {
 
   const testAndSave = async () => {
     const k = key.trim();
-    if (!k.startsWith("AIza")) {
-      setErr("La key de Gemini empieza con 'AIza...' — verificá que copiaste bien");
+    if (k.length < 20) {
+      setErr("Key muy corta — verificá que copiaste todo el texto");
       return;
     }
     setTesting(true); setErr(null);
@@ -489,9 +489,9 @@ function Onboarding({ onDone }) {
             </a>
           },
           { n:"2", icon:"🔑", title:'Tocá "Get API key" → "Create API key"',
-            desc:"Elegí cualquier proyecto o creá uno nuevo. Copiá la key que empieza con AIza..." },
+            desc:"Elegí cualquier proyecto o creá uno nuevo. Copiá la key completa (puede empezar con AIza... o AQ...)" },
           { n:"3", icon:"📋", title:"Pegá tu key acá abajo",
-            desc:"La key queda guardada solo en tu celular. Nadie más la ve." },
+            desc:"La key queda guardada solo en tu celular. Nadie más la ve. Copiá todo el texto de la key." },
         ].map(({ n, icon, title, desc, action }) => (
           <div key={n} style={{ display:"flex", gap:14, alignItems:"flex-start" }}>
             <div style={{ width:32, height:32, borderRadius:"50%", background:`rgba(${rgb(C.cyan)},0.15)`,
@@ -514,7 +514,7 @@ function Onboarding({ onDone }) {
         <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
           <input
             style={{ ...S.inp, fontSize:12, letterSpacing:.5 }}
-            placeholder="AIzaSy... (pegá tu key acá)"
+            placeholder="AIzaSy... o AQ.Ab8R... (pegá tu key acá)"
             value={key}
             onChange={e => { setKey(e.target.value); setErr(null); }}
           />
