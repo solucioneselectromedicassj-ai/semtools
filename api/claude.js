@@ -45,6 +45,7 @@ export default async function handler(req) {
     generationConfig: { maxOutputTokens: body.max_tokens || 1000, temperature: 0.3 },
   };
 
+  // Nuevo formato de key AQ. usa flash-latest; ambos formatos funcionan igual
   const model = 'gemini-1.5-flash';
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${userKey}`;
 
