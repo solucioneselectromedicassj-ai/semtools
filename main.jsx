@@ -395,157 +395,362 @@ function DevicePanel({ info, onClose }) {
 }
 
 
-// ── Onboarding — configuración de API key ────────────────────────────────────
-function Onboarding({ onDone }) {
-  const [key, setKey] = useState("");
-  const [step, setStep] = useState(1); // 1=intro, 2=pegar key, 3=listo
-  const [testing, setTesting] = useState(false);
-  const [err, setErr] = useState(null);
 
+// ── Onboarding — 3 pasos: API Key → Test sensores → Dashboard ────────────────
+
+// Qué sensor necesita cada herramienta
+const TOOL_NEEDS = {
+  decibeles:   { needs:["microphone"],                    label:"Decibelímetro"      },
+  nivel:       { needs:["accelerometer"],                 label:"Nivel"              },
+  brujula:     { needs:["magnetometer"],                  label:"Brújula"            },
+  oscilo:      { needs:["microphone"],                    label:"Osciloscopio"       },
+  sistema:     { needs:[],                                label:"Sistema"            },
+  qr:          { needs:["camera"],                        label:"QR / Código Barras" },
+  ir:          { needs:["camera"],                        label:"Control Remoto IR"  },
+  endoscopio:  { needs:["camera"],                        label:"Endoscopio / USB"   },
+  resistencias:{ needs:["camera","ai"],                   label:"Resistencias"       },
+  integrados:  { needs:["camera","ai"],                   label:"Integrados IC"      },
+  distancia:   { needs:["camera"],                        label:"Distancia"          },
+  jack_thermo: { needs:["microphone"],                    label:"Temperatura"        },
+  jack_thermo2:{ needs:["microphone"],                    label:"Dual Temp"          },
+  jack_air:    { needs:["microphone"],                    label:"Flujo Aire"         },
+  jack_volt:   { needs:["microphone"],                    label:"Voltaje CC"         },
+  jack_light:  { needs:["microphone"],                    label:"Luminosidad"        },
+  jack_raw:    { needs:["microphone"],                    label:"Señal Cruda"        },
+  red:         { needs:[],                                label:"Red / Internet"     },
+  modulos:     { needs:[],                                label:"Módulos"            },
+  tacometro:   { needs:[],                                label:"Tacómetro"          },
+};
+
+function toolEnabled(toolId, caps) {
+  const needs = TOOL_NEEDS[toolId]?.needs || [];
+  return needs.every(n => caps[n]);
+}
+
+async function runSensorDetection() {
+  const caps = {
+    camera:      false,
+    microphone:  false,
+    accelerometer: false,
+    gyroscope:   false,
+    magnetometer: false,
+    ai:          false,
+  };
+
+  // Cámara
+  try {
+    const s = await navigator.mediaDevices.getUserMedia({ video: true });
+    caps.camera = true; s.getTracks().forEach(t => t.stop());
+  } catch(_e) {}
+
+  // Micrófono
+  try {
+    const s = await navigator.mediaDevices.getUserMedia({ audio: true });
+    caps.microphone = true; s.getTracks().forEach(t => t.stop());
+  } catch(_e) {}
+
+  // Acelerómetro + giroscopio + magnetómetro — escuchar 3s
+  await new Promise(resolve => {
+    const alphas = [];
+    const motionH = e => {
+      const ag = e.accelerationIncludingGravity;
+      if (ag && ag.x !== null) caps.accelerometer = true;
+      if (e.rotationRate?.alpha !== null) caps.gyroscope = true;
+    };
+    const oriH = e => {
+      if (e.alpha !== null && e.alpha !== undefined) alphas.push(e.alpha);
+    };
+    const absH = e => {
+      if (e.alpha !== null && e.alpha !== undefined && e.absolute) alphas.push(e.alpha + 1000);
+    };
+    window.addEventListener("devicemotion", motionH, true);
+    window.addEventListener("deviceorientation", oriH, true);
+    window.addEventListener("deviceorientationabsolute", absH, true);
+    setTimeout(() => {
+      window.removeEventListener("devicemotion", motionH, true);
+      window.removeEventListener("deviceorientation", oriH, true);
+      window.removeEventListener("deviceorientationabsolute", absH, true);
+      const hasAbs = alphas.some(a => a > 999);
+      const range  = alphas.length > 1
+        ? Math.max(...alphas.map(a => a > 999 ? a - 1000 : a)) -
+          Math.min(...alphas.map(a => a > 999 ? a - 1000 : a)) : 0;
+      caps.magnetometer = alphas.length > 0 && (hasAbs || range > 0.5);
+      resolve();
+    }, 3500);
+  });
+
+  // IA — verificar si hay key guardada
+  try {
+    const k = localStorage.getItem("sem_gemini_key");
+    caps.ai = !!k && k !== "SKIP";
+  } catch(_e) {}
+
+  return caps;
+}
+
+function Onboarding({ onDone }) {
+  const [step,    setStep]    = useState(1); // 1=apikey, 2=sensors, 3=results
+  const [key,     setKey]     = useState("");
+  const [testing, setTesting] = useState(false);
+  const [err,     setErr]     = useState(null);
+  const [caps,    setCaps]    = useState(null);
+  const [scanning,setScanning]= useState(false);
+
+  // ── PASO 1: API Key ────────────────────────────────────────────────────────
   const testAndSave = async () => {
     const k = key.trim();
-    if (k.length < 20) {
-      setErr("Key muy corta — verificá que copiaste todo el texto");
-      return;
-    }
+    if (k.length < 15) { setErr("Key muy corta — copiá todo el texto"); return; }
     setTesting(true); setErr(null);
     try {
-      // Test mínimo: texto simple sin imagen
-      // Paso 1: listar modelos disponibles con esta key
-      let modelOk = false, listErr = "";
       for (const ver of ["v1beta","v1"]) {
-        try {
-          const lr = await fetch(
-            `https://generativelanguage.googleapis.com/${ver}/models?key=${k}&pageSize=5`,
-            { headers:{"Content-Type":"application/json"} }
-          );
-          const ld = await lr.json();
-          if (!lr.ok) {
-            const m = ld?.error?.message||"";
-            if (m.includes("API_KEY_INVALID")||m.includes("API key not valid"))
-              throw new Error("Key inválida — verificá que copiaste toda la key correctamente");
-            listErr = m; continue;
-          }
-          if (ld.models && ld.models.length > 0) { modelOk = true; break; }
-        } catch(e2) { if(e2.message.includes("inválida")) throw e2; listErr = e2.message; }
+        const r = await fetch(
+          `https://generativelanguage.googleapis.com/${ver}/models?key=${k}&pageSize=3`,
+          { headers:{"Content-Type":"application/json"} }
+        );
+        const d = await r.json();
+        if (r.ok && d.models?.length > 0) {
+          localStorage.setItem("sem_gemini_key", k);
+          setStep(2); setTesting(false); return;
+        }
+        const m = d?.error?.message || "";
+        if (m.includes("API_KEY_INVALID") || m.includes("API key not valid"))
+          throw new Error("Key inválida — verificá que copiaste bien");
       }
-      if (!modelOk) throw new Error(listErr || "No se pudo conectar con Google AI. Verificá que la API de Gemini esté habilitada en tu proyecto.");
-      localStorage.setItem("sem_gemini_key", k);
-      setStep(3);
-    } catch(e) {
-      setErr("Key inválida o sin conexión: " + e.message);
-    }
+      throw new Error("No se encontraron modelos. Verificá que la API de Gemini esté habilitada.");
+    } catch(e) { setErr(e.message); }
     setTesting(false);
   };
 
-  const skip = () => { localStorage.setItem("sem_gemini_key","SKIP"); onDone(); };
+  const skipKey = () => {
+    localStorage.setItem("sem_gemini_key", "SKIP");
+    setStep(2);
+  };
 
-  if (step === 3) return (
-    <div style={{ position:"fixed", inset:0, background:"linear-gradient(170deg,#0D1829 0%,#152240 100%)",
-                  display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center",
-                  padding:24, zIndex:200 }}>
-      <div style={{ fontSize:64, marginBottom:16, filter:"drop-shadow(0 0 20px #00EF88)" }}>✓</div>
-      <div style={{ fontFamily:MONO, fontSize:20, fontWeight:700, color:C.green,
-                    textShadow:`0 0 20px ${C.green}`, marginBottom:8 }}>¡Todo listo!</div>
-      <div style={{ fontFamily:MONO, fontSize:11, color:C.dim, textAlign:"center", lineHeight:1.8, marginBottom:32 }}>
-        Tu API key de Gemini está guardada en este dispositivo.{"\n"}
-        Podés analizar resistencias e integrados IC.
-      </div>
-      <button style={{ ...S.btn("p", C.green), maxWidth:280 }} onClick={onDone}>
-        Entrar a SEM Tools →
-      </button>
-    </div>
-  );
+  // ── PASO 2: Test sensores ─────────────────────────────────────────────────
+  const runTest = async () => {
+    setScanning(true);
+    const result = await runSensorDetection();
+    setCaps(result);
+    setScanning(false);
+    setStep(3);
+  };
 
+  // ── PASO 3: Resultados + entrar ───────────────────────────────────────────
+  const finish = () => {
+    try { localStorage.setItem("sem_caps", JSON.stringify(caps)); } catch(_e) {}
+    onDone(caps);
+  };
+
+  const CAP_LABELS = {
+    camera:       { icon:"📷", label:"Cámara" },
+    microphone:   { icon:"🎙", label:"Micrófono" },
+    accelerometer:{ icon:"⦿",  label:"Acelerómetro" },
+    gyroscope:    { icon:"🌀", label:"Giroscopio" },
+    magnetometer: { icon:"🧭", label:"Magnetómetro" },
+    ai:           { icon:"🤖", label:"IA (Gemini)" },
+  };
+
+  const BG = "linear-gradient(170deg,#0D1829 0%,#152240 100%)";
+
+  // ── Render ─────────────────────────────────────────────────────────────────
   return (
-    <div style={{ position:"fixed", inset:0, background:"linear-gradient(170deg,#0D1829 0%,#152240 100%)",
+    <div style={{ position:"fixed", inset:0, background:BG,
                   overflowY:"auto", zIndex:200, display:"flex", flexDirection:"column" }}>
-      <div style={{ padding:"32px 20px 24px", display:"flex", flexDirection:"column", gap:20, maxWidth:480, margin:"0 auto", width:"100%" }}>
+      <div style={{ padding:"28px 20px 32px", maxWidth:480, margin:"0 auto", width:"100%",
+                    display:"flex", flexDirection:"column", gap:20 }}>
 
         {/* Logo */}
-        <div style={{ textAlign:"center", paddingTop:16 }}>
-          <div style={{ fontFamily:MONO, fontSize:28, fontWeight:700, color:C.amber,
+        <div style={{ textAlign:"center", paddingTop:8 }}>
+          <div style={{ fontFamily:MONO, fontSize:26, fontWeight:700, color:C.amber,
                         textShadow:`0 0 24px ${C.amber}` }}>SEM Tools</div>
-          <div style={{ fontFamily:MONO, fontSize:10, color:C.dim, letterSpacing:2, marginTop:4 }}>
+          <div style={{ fontFamily:MONO, fontSize:9, color:C.dim, letterSpacing:3, marginTop:4 }}>
             CONFIGURACIÓN INICIAL
           </div>
-        </div>
-
-        {/* Herramientas de IA */}
-        <div style={{ ...glass(C.violet, 0.08), borderRadius:14, padding:18,
-                      border:`1px solid rgba(${rgb(C.violet)},0.25)` }}>
-          <div style={{ fontFamily:MONO, fontSize:11, fontWeight:700, color:C.violet, marginBottom:12 }}>
-            🤖 HERRAMIENTAS CON INTELIGENCIA ARTIFICIAL
+          {/* Barra de progreso */}
+          <div style={{ display:"flex", gap:6, justifyContent:"center", marginTop:16 }}>
+            {[1,2,3].map(n => (
+              <div key={n} style={{ height:4, width:60, borderRadius:2,
+                background: n <= step ? C.amber : "rgba(255,255,255,0.1)",
+                boxShadow: n === step ? `0 0 10px ${C.amber}` : "none",
+                transition:"all .3s" }}/>
+            ))}
           </div>
-          {["Identificador de Resistencias — foto → valor Ω",
-            "Identificador de Integrados IC — foto → datasheet",
-            "Medidor de Distancia con IA"].map((t,i) => (
-            <div key={i} style={{ fontFamily:MONO, fontSize:10, color:C.dim, lineHeight:1.9 }}>
-              <span style={{ color:C.violet }}>▸ </span>{t}
-            </div>
-          ))}
-          <div style={{ fontFamily:MONO, fontSize:10, color:C.dim, marginTop:12, lineHeight:1.7,
-                        background:"rgba(255,255,255,0.03)", borderRadius:8, padding:"8px 10px" }}>
-            Estas herramientas usan Google Gemini para analizar imágenes.
-            Necesitás una key gratuita de Google — la cuota gratis es más que suficiente para uso de taller.
+          <div style={{ fontFamily:MONO, fontSize:9, color:C.dim, marginTop:8 }}>
+            {step===1?"Paso 1 de 3 — API de IA":step===2?"Paso 2 de 3 — Test de hardware":"Paso 3 de 3 — Resultado"}
           </div>
         </div>
 
-        {/* Pasos */}
-        {[
-          { n:"1", icon:"🌐", title:"Abrí Google AI Studio",
-            desc:"Tocá el botón. Se abre aistudio.google.com en el navegador.",
-            action: <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer"
-              style={{ ...S.btn("p", C.blue), display:"block", textAlign:"center",
-                       textDecoration:"none", fontFamily:MONO, fontSize:12, fontWeight:700 }}>
-              Abrir Google AI Studio →
-            </a>
-          },
-          { n:"2", icon:"🔑", title:'Tocá "Get API key" → "Create API key"',
-            desc:"Elegí cualquier proyecto o creá uno nuevo. Copiá la key completa (puede empezar con AIza... o AQ...)" },
-          { n:"3", icon:"📋", title:"Pegá tu key acá abajo",
-            desc:"La key queda guardada solo en tu celular. Nadie más la ve. Copiá todo el texto de la key." },
-        ].map(({ n, icon, title, desc, action }) => (
-          <div key={n} style={{ display:"flex", gap:14, alignItems:"flex-start" }}>
-            <div style={{ width:32, height:32, borderRadius:"50%", background:`rgba(${rgb(C.cyan)},0.15)`,
-                          border:`1px solid rgba(${rgb(C.cyan)},0.4)`, display:"flex", alignItems:"center",
-                          justifyContent:"center", fontFamily:MONO, fontSize:14, fontWeight:700,
-                          color:C.cyan, flexShrink:0 }}>{n}</div>
-            <div style={{ flex:1 }}>
-              <div style={{ fontFamily:MONO, fontSize:11, fontWeight:700, color:C.text, marginBottom:4 }}>
-                {icon} {title}
+        {/* ── PASO 1 ─────────────────────────────────────────────────────── */}
+        {step === 1 && (
+          <>
+            <div style={{ ...glass(C.violet, 0.08), borderRadius:14, padding:18,
+                          border:`1px solid rgba(${rgb(C.violet)},0.25)` }}>
+              <div style={{ fontFamily:MONO, fontSize:11, fontWeight:700, color:C.violet, marginBottom:10 }}>
+                🤖 HERRAMIENTAS CON IA
               </div>
-              <div style={{ fontFamily:MONO, fontSize:10, color:C.dim, lineHeight:1.7, marginBottom:action?10:0 }}>
-                {desc}
+              <div style={{ fontFamily:MONO, fontSize:10, color:C.dim, lineHeight:1.8 }}>
+                Resistencias, Integrados IC y Distancia usan Google Gemini para analizar fotos.
+                La key es gratis y queda solo en tu celular.
               </div>
-              {action}
             </div>
-          </div>
-        ))}
 
-        {/* Input de key */}
-        <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
-          <input
-            style={{ ...S.inp, fontSize:12, letterSpacing:.5 }}
-            placeholder="AIzaSy... o AQ.Ab8R... (pegá tu key acá)"
-            value={key}
-            onChange={e => { setKey(e.target.value); setErr(null); }}
-          />
-          {err && <div style={{ fontFamily:MONO, fontSize:10, color:C.red, lineHeight:1.6 }}>{err}</div>}
-          <button style={{ ...S.btn("p", C.green), opacity: testing ? 0.7 : 1 }}
-            onClick={testing ? null : testAndSave}>
-            {testing ? "Verificando…" : "✓ Guardar y verificar key"}
-          </button>
-        </div>
+            {[
+              { n:"1", icon:"🌐", title:"Abrí Google AI Studio",
+                btn: <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer"
+                  style={{ ...S.btn("p",C.blue), display:"block", textDecoration:"none",
+                           textAlign:"center", fontFamily:MONO, fontSize:12, fontWeight:700 }}>
+                  Abrir Google AI Studio →
+                </a>,
+                desc:"Se abre en el navegador. Iniciá sesión con tu cuenta Google."
+              },
+              { n:"2", icon:"🔑", title:'Tocá "Create API key"',
+                desc:'Elegí "Default Gemini Project". Copiá todo el texto de la clave (AIzaSy... o AQ...).' },
+              { n:"3", icon:"📋", title:"Pegá tu key acá abajo",
+                desc:"Queda guardada solo en este celular. Nadie más la ve." },
+            ].map(({ n, icon, title, btn, desc }) => (
+              <div key={n} style={{ display:"flex", gap:14, alignItems:"flex-start" }}>
+                <div style={{ width:32, height:32, borderRadius:"50%", flexShrink:0,
+                              background:`rgba(${rgb(C.cyan)},0.15)`,
+                              border:`1px solid rgba(${rgb(C.cyan)},0.4)`,
+                              display:"flex", alignItems:"center", justifyContent:"center",
+                              fontFamily:MONO, fontSize:14, fontWeight:700, color:C.cyan }}>
+                  {n}
+                </div>
+                <div style={{ flex:1 }}>
+                  <div style={{ fontFamily:MONO, fontSize:11, fontWeight:700, color:C.text, marginBottom:4 }}>
+                    {icon} {title}
+                  </div>
+                  <div style={{ fontFamily:MONO, fontSize:10, color:C.dim, lineHeight:1.7, marginBottom:btn?10:0 }}>
+                    {desc}
+                  </div>
+                  {btn}
+                </div>
+              </div>
+            ))}
 
-        {/* Saltar */}
-        <div style={{ textAlign:"center", paddingBottom:24 }}>
-          <button style={{ border:"none", background:"none", color:C.dim,
-                           fontFamily:MONO, fontSize:10, cursor:"pointer", textDecoration:"underline" }}
-            onClick={skip}>
-            Saltar por ahora — usar solo herramientas sin IA
-          </button>
-        </div>
+            <input style={{ ...S.inp, fontSize:12 }}
+              placeholder="Pegá tu key acá (AIzaSy... o AQ...)"
+              value={key} onChange={e=>{ setKey(e.target.value); setErr(null); }}/>
+            {err && <div style={{ fontFamily:MONO, fontSize:10, color:C.red, lineHeight:1.6,
+                                   background:`rgba(${rgb(C.red)},0.08)`, borderRadius:8, padding:"8px 12px" }}>{err}</div>}
+            <button style={{ ...S.btn("p",C.green), opacity:testing?.7:1 }}
+              onClick={testing?null:testAndSave}>
+              {testing?"Verificando…":"✓ Guardar y continuar"}
+            </button>
+            <div style={{ textAlign:"center" }}>
+              <button style={{ border:"none", background:"none", color:C.dim,
+                               fontFamily:MONO, fontSize:10, cursor:"pointer", textDecoration:"underline" }}
+                onClick={skipKey}>
+                Saltar — usar sin herramientas de IA
+              </button>
+            </div>
+          </>
+        )}
+
+        {/* ── PASO 2 ─────────────────────────────────────────────────────── */}
+        {step === 2 && (
+          <>
+            <div style={{ ...glass(C.cyan, 0.07), borderRadius:14, padding:18,
+                          border:`1px solid rgba(${rgb(C.cyan)},0.25)`, textAlign:"center" }}>
+              <div style={{ fontSize:40, marginBottom:12 }}>🔬</div>
+              <div style={{ fontFamily:MONO, fontSize:13, fontWeight:700, color:C.cyan, marginBottom:10 }}>
+                Test de hardware
+              </div>
+              <div style={{ fontFamily:MONO, fontSize:10, color:C.dim, lineHeight:1.9 }}>
+                Vamos a probar qué sensores tiene tu celular para saber qué herramientas van a funcionar.{"\n\n"}
+                El test dura 4 segundos. Cuando empiece:{"\n"}
+                • Mové el celular suavemente{"\n"}
+                • Giralo un poco en todas las direcciones
+              </div>
+            </div>
+
+            {!scanning
+              ? <button style={{ ...S.btn("p",C.cyan), fontSize:13, padding:"16px" }}
+                  onClick={runTest}>
+                  🔬 Iniciar test de sensores
+                </button>
+              : <div style={{ ...S.disp(C.cyan), textAlign:"center", padding:"24px 16px" }}>
+                  <div style={{ fontFamily:MONO, fontSize:14, color:C.cyan,
+                                textShadow:`0 0 16px ${C.cyan}`, marginBottom:8 }}>
+                    Probando sensores…
+                  </div>
+                  <div style={{ fontFamily:MONO, fontSize:10, color:C.dim, lineHeight:1.8 }}>
+                    Mové el celular suavemente en todas las direcciones
+                  </div>
+                  <div style={{ marginTop:16, display:"flex", justifyContent:"center", gap:6 }}>
+                    {[0,1,2].map(i => (
+                      <div key={i} style={{ width:8, height:8, borderRadius:"50%",
+                                            background:C.cyan, opacity: 0.4 + i*0.3 }}/>
+                    ))}
+                  </div>
+                </div>
+            }
+          </>
+        )}
+
+        {/* ── PASO 3: RESULTADOS ─────────────────────────────────────────── */}
+        {step === 3 && caps && (
+          <>
+            {/* Sensores detectados */}
+            <div style={{ ...S.disp(C.cyan), padding:"14px 16px" }}>
+              <div style={{ fontFamily:MONO, fontSize:9, color:C.cyan, fontWeight:700,
+                            letterSpacing:2, marginBottom:12 }}>SENSORES DETECTADOS</div>
+              {Object.entries(CAP_LABELS).map(([k, { icon, label }]) => (
+                <div key={k} style={{ display:"flex", alignItems:"center", gap:10, padding:"8px 0",
+                                      borderBottom:`1px solid ${C.bord}` }}>
+                  <span style={{ fontSize:18 }}>{icon}</span>
+                  <div style={{ flex:1, fontFamily:MONO, fontSize:11, color:C.text }}>{label}</div>
+                  <div style={{ ...S.pill(caps[k]?C.green:C.red) }}>
+                    {caps[k]?"✓ Disponible":"✗ No detectado"}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Herramientas habilitadas/deshabilitadas */}
+            <div style={{ ...glass(C.green,0.06), borderRadius:12, padding:"14px 16px",
+                          border:`1px solid rgba(${rgb(C.green)},0.2)` }}>
+              <div style={{ fontFamily:MONO, fontSize:9, color:C.green, fontWeight:700,
+                            letterSpacing:2, marginBottom:10 }}>QUÉ VA A FUNCIONAR EN TU CELULAR</div>
+              {Object.entries(TOOL_NEEDS).map(([id, { label, needs }]) => {
+                const ok = needs.every(n => caps[n]);
+                const missing = needs.filter(n => !caps[n]);
+                return (
+                  <div key={id} style={{ display:"flex", alignItems:"center", gap:8, padding:"6px 0",
+                                         borderBottom:`1px solid ${C.bord}` }}>
+                    <div style={{ width:10, height:10, borderRadius:"50%", flexShrink:0,
+                                  background:ok?C.green:C.red,
+                                  boxShadow:`0 0 6px ${ok?C.green:C.red}` }}/>
+                    <div style={{ flex:1 }}>
+                      <span style={{ fontFamily:MONO, fontSize:10,
+                                     color:ok?C.text:C.dim }}>{label}</span>
+                      {!ok && missing.length > 0 && (
+                        <span style={{ fontFamily:MONO, fontSize:9, color:C.dim }}>
+                          {" "}— requiere {missing.join(", ")}
+                        </span>
+                      )}
+                    </div>
+                    <span style={{ fontFamily:MONO, fontSize:12,
+                                   color:ok?C.green:C.red }}>{ok?"✓":"✗"}</span>
+                  </div>
+                );
+              })}
+            </div>
+
+            {!caps.magnetometer && (
+              <div style={{ fontFamily:MONO, fontSize:10, color:C.amber, lineHeight:1.8,
+                            background:`rgba(${rgb(C.amber)},0.08)`, borderRadius:8, padding:"10px 12px" }}>
+                ⚠ Tu celular no tiene magnetómetro — la brújula no va a funcionar.
+                El Nivel sí {caps.accelerometer?"funciona porque tiene acelerómetro.":""}
+              </div>
+            )}
+
+            <button style={{ ...S.btn("p",C.green), fontSize:13, padding:"16px" }}
+              onClick={finish}>
+              Entrar a SEM Tools →
+            </button>
+          </>
+        )}
 
       </div>
     </div>
@@ -2753,7 +2958,7 @@ function ModulePlaceholder({icon,title,why,when}) {
 }
 
 // ── Home ──────────────────────────────────────────────────────────────────────
-function Home({onSel}) {
+function Home({onSel, caps}) {
   const [sector,setSector]=React.useState(null);
   if(sector){
     const bl=BLOCKS.find(b=>b.id===sector);
@@ -2767,12 +2972,19 @@ function Home({onSel}) {
           {bl.tools.map(tid=>{
             const t=TOOL[tid]; const disabled=tid==="tacometro";
             return (
-              <div key={tid} style={{...S.card(t.col),opacity:disabled?.6:1,flexDirection:"column",alignItems:"flex-start",minHeight:110}}
-                onClick={()=>!disabled&&onSel(tid)}>
+              <div key={tid} style={{...S.card(t.col),opacity:disabled||cantRun?.5:1,flexDirection:"column",alignItems:"flex-start",minHeight:110}}
+                onClick={()=>!disabled&&!cantRun&&onSel(tid)}>
                 <div style={{fontSize:32,filter:`drop-shadow(0 0 10px ${t.col}88)`,marginBottom:6}}>{t.icon}</div>
                 <div style={{fontFamily:MONO,fontSize:12,fontWeight:700,color:C.text,lineHeight:1.3,marginBottom:4}}>{t.label}</div>
                 <div style={{fontSize:10,color:C.dim,lineHeight:1.5}}>{t.sub}</div>
                 {disabled&&<div style={{marginTop:8}}><span style={S.pill(C.green)}>módulo</span></div>}
+                {cantRun&&!disabled&&(
+                  <div style={{marginTop:6}}>
+                    <span style={S.pill(C.red)}>
+                      ✗ {(TOOL_NEEDS[tid]?.needs||[]).filter(n=>!caps[n]).join(" + ")} requerido
+                    </span>
+                  </div>
+                )}
               </div>
             );
           })}
@@ -2846,6 +3058,10 @@ function App() {
     try{ const k=localStorage.getItem("sem_gemini_key"); return !k; }
     catch(_e){ return false; }
   });
+  const [caps,setCaps]=useState(()=>{
+    try{ const c=localStorage.getItem("sem_caps"); return c?JSON.parse(c):null; }
+    catch(_e){ return null; }
+  });
   const t=tool?TOOL[tool]:null;
   const col=t?.col||C.amber;
 
@@ -2862,7 +3078,7 @@ function App() {
 
   return (
     <div style={S.app}>
-      {showOnboard && <Onboarding onDone={()=>setShowOnboard(false)}/>}
+      {showOnboard && <Onboarding onDone={c=>{setCaps(c);setShowOnboard(false);}}/>}
       {showDev && <DevicePanel info={devInfo} onClose={()=>setShowDev(false)}/>}
       <div style={S.hdr}>
         {tool&&<button style={{border:"none",background:"none",color:col,fontFamily:MONO,fontSize:22,cursor:"pointer",padding:"0 8px 0 0",textShadow:`0 0 12px ${col}66`}} onClick={()=>setTool(null)}>←</button>}
@@ -2884,7 +3100,7 @@ function App() {
         )}
       </div>
       <div style={S.body}>
-        {tool===null?<Home onSel={setTool}/>:getView(tool)}
+        {tool===null?<Home onSel={setTool} caps={caps}/>:getView(tool)}
       </div>
       <div style={S.nav}>
         <button style={S.nb(tool===null,C.amber)} onClick={()=>setTool(null)}>
