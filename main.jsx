@@ -13,7 +13,7 @@ const glass = (h,a=0.06) => ({ background:`rgba(${rgb(h)},${a})`, backdropFilter
 
 // ── Tokens ────────────────────────────────────────────────────────────────────
 const C = {
-  bg:"#0D1829", bord:"rgba(255,255,255,0.12)", text:"#E2E8FF", dim:"#5A7099",
+  bg:"#0D1829", bord:"rgba(255,255,255,0.18)", text:"#F0F4FF", dim:"#8898C0",
   cyan:"#00D9FF", orange:"#FF7A35", violet:"#B06EFF", green:"#00EF88",
   amber:"#FFB830", red:"#FF3355", blue:"#4D9EFF",
 };
@@ -86,7 +86,7 @@ const S = {
   dval: (col,sz=46) => ({ fontFamily:MONO, fontSize:sz, fontWeight:700, color:col,
           lineHeight:1, textShadow:`0 0 24px ${col}` }),
   dunt: { fontFamily:MONO, fontSize:12, color:C.dim, marginLeft:5 },
-  dlbl: { fontFamily:MONO, fontSize:9, color:C.dim, letterSpacing:2, marginTop:5 },
+  dlbl: { fontFamily:MONO, fontSize:10, color:C.dim, letterSpacing:1.5, marginTop:5 },
   btn:  (v,col=C.amber) => {
     const bg = v==="p"?col:v==="r"?C.red:v==="g"?C.green:"rgba(255,255,255,0.07)";
     const accent = v==="p"||v==="r"||v==="g";
@@ -100,7 +100,7 @@ const S = {
   row:  { display:"flex", gap:8 },
   res:  col => ({ ...glass(col,0.05), borderRadius:10, padding:14,
           border:`1px solid rgba(${rgb(col)},0.2)` }),
-  note: { fontFamily:MONO, fontSize:10, color:C.dim, lineHeight:1.7,
+  note: { fontFamily:MONO, fontSize:11, color:C.dim, lineHeight:1.8,
           background:"rgba(255,255,255,0.03)", borderRadius:8,
           padding:"8px 12px", border:`1px solid ${C.bord}` },
   tag:  ok => ({ background:ok?"rgba(0,239,136,0.1)":"rgba(255,51,85,0.1)",
@@ -119,7 +119,7 @@ const S = {
   pill: col => ({ background:`rgba(${rgb(col)},0.12)`, border:`1px solid rgba(${rgb(col)},0.3)`,
           borderRadius:20, padding:"3px 10px", fontFamily:MONO,
           fontSize:9, color:col, fontWeight:700, display:"inline-block" }),
-  st:   col => ({ fontFamily:MONO, fontSize:9, letterSpacing:2.5,
+  st:   col => ({ fontFamily:MONO, fontSize:10, letterSpacing:2,
           color:col, textTransform:"uppercase", fontWeight:700, marginBottom:2 }),
 };
 
@@ -2206,7 +2206,9 @@ function ToolBLEScanner() {
         acceptAllDevices: true,
         optionalServices: [
           "battery_service","device_information","generic_access",
-          "heart_rate","health_thermometer","0x180A","0x180F",
+          "heart_rate","health_thermometer",
+          "00001800-0000-1000-8000-00805f9b34fb",
+          "00001801-0000-1000-8000-00805f9b34fb",
         ]
       });
       const info = {
@@ -3619,9 +3621,9 @@ function Home({onSel, caps}) {
                   filter:`drop-shadow(0 0 8px ${t.col}88)`}}>
                   {cantRun?"🔒":t.icon}
                 </div>
-                <div style={{fontFamily:MONO,fontSize:12,fontWeight:700,
+                <div style={{fontFamily:MONO,fontSize:13,fontWeight:700,
                   color:cantRun?C.dim:C.text,marginBottom:3}}>{t.label}</div>
-                <div style={{fontSize:10,color:C.dim,lineHeight:1.45}}>{t.sub}</div>
+                <div style={{fontSize:11,color:C.dim,lineHeight:1.5}}>{t.sub}</div>
                 {disabled&&<div style={{marginTop:6}}><span style={S.pill(C.green)}>módulo</span></div>}
                 {cantRun&&<div style={{marginTop:6}}>
                   <span style={S.pill(C.red)}>sin {missing.join(" + ")}</span>
@@ -3650,9 +3652,9 @@ function Home({onSel, caps}) {
         }} onClick={()=>setSector(bl.id)}>
           <div style={{fontSize:36,filter:`drop-shadow(0 0 12px ${bl.col}99)`}}>{bl.icon}</div>
           <div style={{flex:1}}>
-            <div style={{fontFamily:MONO,fontSize:14,fontWeight:700,color:bl.col,
+            <div style={{fontFamily:MONO,fontSize:15,fontWeight:700,color:bl.col,
               textShadow:`0 0 14px ${bl.col}88`,letterSpacing:1,marginBottom:4}}>{bl.label}</div>
-            <div style={{fontFamily:MONO,fontSize:10,color:C.dim,lineHeight:1.6}}>
+            <div style={{fontFamily:MONO,fontSize:11,color:C.dim,lineHeight:1.6}}>
               {bl.tools.map(tid=>TOOL[tid]?.icon).filter(Boolean).join("  ")}
               {" · "}{bl.tools.length} herramienta{bl.tools.length>1?"s":""}
             </div>
@@ -3740,6 +3742,7 @@ function App() {
     try{ const k=localStorage.getItem("sem_gemini_key"); return !k; }
     catch(_e){ return false; }
   });
+  const [hiContrast,setHiContrast]=useState(false);
   const [caps,setCaps]=useState(()=>{
     try{ const c=localStorage.getItem("sem_caps"); return c?JSON.parse(c):null; }
     catch(_e){ return null; }
@@ -3780,6 +3783,12 @@ function App() {
             🔑
           </button>
         )}
+        <button style={{border:"none",background:hiContrast?"rgba(255,184,48,0.2)":"rgba(255,255,255,0.06)",
+          borderRadius:8,padding:"6px 8px",cursor:"pointer",fontSize:14,
+          boxShadow:hiContrast?`0 0 10px ${C.amber}66`:"none"}}
+          onClick={()=>setHiContrast(h=>!h)} title="Modo solar">
+          ☀️
+        </button>
       </div>
       <div style={S.body}>
         {tool===null?<Home onSel={setTool} caps={caps}/>:<ErrorBoundary key={tool}>{getView(tool)}</ErrorBoundary>}
