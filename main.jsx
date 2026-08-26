@@ -485,16 +485,104 @@ function toolEnabled(toolId, caps) {
   return needs.every(n => caps[n]);
 }
 
+
+// ── Detección de marca y características del dispositivo ─────────────────────
+function detectBrand() {
+  const ua = navigator.userAgent;
+  const uaLow = ua.toLowerCase();
+
+  // Marca
+  let brand = "Android genérico", os = "Android", ui = "stock";
+  let hasJackGuess = true; // la mayoría tiene jack, excepto los conocidos sin él
+
+  if (/iphone|ipad/i.test(ua)) {
+    brand = "Apple"; os = "iOS"; ui = "ios";
+    // iPhone 7+ no tiene jack (2016+). Simplificación: asumir sin jack en iOS
+    hasJackGuess = false;
+  } else if (/samsung|sm-[a-z]/i.test(ua)) {
+    brand = "Samsung"; ui = "oneui";
+    // Modelos sin jack: S20+, A52s, etc. Difícil de detectar exactamente
+    if (/sm-g98|sm-g99|sm-f9|sm-s9|sm-a52/i.test(ua)) hasJackGuess = false;
+  } else if (/miui|xiaomi|redmi|poco/i.test(ua)) {
+    brand = "Xiaomi / Redmi"; ui = "miui";
+  } else if (/huawei|emui/i.test(ua)) {
+    brand = "Huawei"; ui = "emui";
+  } else if (/moto[a-z ]|motorola/i.test(ua)) {
+    brand = "Motorola"; ui = "stock";
+  } else if (/oneplus/i.test(ua)) {
+    brand = "OnePlus"; ui = "oxygen";
+    if (/oneplus 7t|oneplus 8|oneplus 9|oneplus 10|oneplus 11|oneplus 12/i.test(ua)) hasJackGuess = false;
+  } else if (/pixel/i.test(ua)) {
+    brand = "Google Pixel"; ui = "stock";
+    if (/pixel [3-9]|pixel pro/i.test(ua)) hasJackGuess = false;
+  } else if (/lg/i.test(ua)) {
+    brand = "LG";
+  } else if (/oppo|realme/i.test(ua)) {
+    brand = "OPPO / Realme"; ui = "coloros";
+  }
+
+  // Modelo crudo
+  const modelMatch = ua.match(/;\s*([^;)]+)\s*Build/) || ua.match(/;\s*([^;)]+)\)/);
+  const model = modelMatch?.[1]?.trim().slice(0,35) || brand;
+
+  // Versión Android
+  const androidVer = ua.match(/Android\s*([\d.]+)/)?.[1] || null;
+  const iosVer = ua.match(/OS\s*([\d_]+)/)?.[1]?.replace(/_/g,".") || null;
+  const osVer = androidVer || iosVer || "?";
+
+  // Consejos específicos por UI
+  const tips = {
+    miui: [
+      "⚙ MIUI restringe sensores en segundo plano — ve a Ajustes → Apps → Chrome → Permisos y habilitá todo",
+      "⚙ Si la brújula no funciona: Ajustes → Privacidad → Permisos especiales → Acceso a sensores",
+      "⚙ Para mejor rendimiento: Ajustes → Batería → Ahorro de energía → Desactivar para Chrome",
+      "⚙ MIUI puede matar apps en segundo plano — bloqueá Chrome en Recientes si usás la app mucho",
+    ],
+    oneui: [
+      "⚙ Samsung One UI: Ajustes → Biometría y seguridad → Gestión de permisos",
+      "⚙ Si el micrófono falla: Ajustes → Privacidad → Administrador de permisos → Micrófono → Chrome",
+      "⚙ Para NFC: Ajustes → Conexiones → NFC y pagos sin contacto → Activar",
+    ],
+    emui: [
+      "⚙ Huawei EMUI puede bloquear acceso a sensores — ve a Ajustes → Aplicaciones → Chrome → Permisos",
+      "⚙ Huawei sin Google: algunas funciones de localización pueden variar",
+      "⚙ Para Bluetooth BLE: Ajustes → Bluetooth → Activar → permitir acceso a ubicación a Chrome",
+    ],
+    ios: [
+      "⚙ iOS: para giroscopio y brújula ve a Ajustes → Safari/Chrome → Movimiento y orientación",
+      "⚙ iOS 13+: los sensores de movimiento requieren permiso explícito por cada web",
+      "⚙ Para NFC en iPhone: disponible en iPhone 7+, se activa automáticamente",
+    ],
+    oxygen: [
+      "⚙ OxygenOS: generalmente sin restricciones. Si hay problemas ve a Ajustes → Aplicaciones → Chrome",
+    ],
+    coloros: [
+      "⚙ ColorOS (OPPO/Realme): Ajustes → Batería → No optimizar → Chrome para mejor rendimiento",
+    ],
+    stock: [
+      "⚙ Android estándar: los permisos se gestionan en Ajustes → Aplicaciones → Chrome → Permisos",
+    ],
+  };
+
+  return {
+    brand, model, os, osVer, ui,
+    hasJackGuess,
+    tips: tips[ui] || tips.stock,
+  };
+}
+
 async function runSensorDetection() {
+  const brandInfo = detectBrand();
   const caps = {
-    camera:      false,
-    microphone:  false,
+    camera:        false,
+    microphone:    false,
     accelerometer: false,
-    gyroscope:   false,
-    magnetometer: false,
-    ai:          false,
-    nfc:         "NDEFReader" in window,
-    jack:        true, // se asume true, difícil detectar sin probar
+    gyroscope:     false,
+    magnetometer:  false,
+    ai:            false,
+    nfc:           "NDEFReader" in window,
+    jack:          brandInfo.hasJackGuess,
+    brand:         brandInfo,
   };
 
   // Cámara
@@ -753,6 +841,50 @@ function Onboarding({ onDone }) {
         {step === 3 && caps && (
           <>
             {/* Sensores detectados */}
+            {/* Info del dispositivo */}
+            {caps.brand && (
+              <div style={{ ...glass(C.amber, 0.07), borderRadius:12, padding:"12px 16px",
+                            border:`1px solid rgba(${rgb(C.amber)},0.25)`, marginBottom:4 }}>
+                <div style={{ fontFamily:MONO, fontSize:9, color:C.amber, fontWeight:700,
+                              letterSpacing:2, marginBottom:8 }}>DISPOSITIVO DETECTADO</div>
+                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+                  <div>
+                    <div style={{ fontFamily:MONO, fontSize:13, fontWeight:700, color:C.text }}>
+                      {caps.brand.brand}
+                    </div>
+                    <div style={{ fontFamily:MONO, fontSize:10, color:C.dim }}>
+                      {caps.brand.model} · {caps.brand.os} {caps.brand.osVer}
+                    </div>
+                  </div>
+                  <div style={{ textAlign:"right" }}>
+                    <div style={S.pill(caps.jack ? C.green : C.amber)}>
+                      Jack 3.5mm: {caps.jack ? "✓ Detectado" : "? No detectado"}
+                    </div>
+                    <div style={{ fontFamily:MONO, fontSize:8, color:C.dim, marginTop:4 }}>
+                      {caps.jack ? "Módulos jack disponibles" : "Usá módulos BLE o USB-C"}
+                    </div>
+                  </div>
+                </div>
+                {/* Toggle manual de jack si hay duda */}
+                <div style={{ marginTop:10, display:"flex", alignItems:"center", gap:10 }}>
+                  <span style={{ fontFamily:MONO, fontSize:9, color:C.dim }}>¿Tenés jack 3.5mm?</span>
+                  <div style={{ display:"flex", gap:6 }}>
+                    {[true, false].map(v => (
+                      <button key={String(v)} style={{
+                        border: caps.jack===v ? `2px solid ${C.amber}` : `1px solid ${C.bord}`,
+                        borderRadius:6, padding:"4px 12px", cursor:"pointer",
+                        background: caps.jack===v ? `rgba(${rgb(C.amber)},0.15)` : "rgba(255,255,255,0.04)",
+                        fontFamily:MONO, fontSize:10,
+                        color: caps.jack===v ? C.amber : C.dim,
+                      }} onClick={() => setCaps(c => ({ ...c, jack: v }))}>
+                        {v ? "Sí" : "No"}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
             <div style={{ ...S.disp(C.cyan), padding:"14px 16px" }}>
               <div style={{ fontFamily:MONO, fontSize:9, color:C.cyan, fontWeight:700,
                             letterSpacing:2, marginBottom:12 }}>SENSORES DETECTADOS</div>
@@ -803,6 +935,37 @@ function Onboarding({ onDone }) {
                             background:`rgba(${rgb(C.amber)},0.08)`, borderRadius:8, padding:"10px 12px" }}>
                 ⚠ Tu celular no tiene magnetómetro — la brújula no va a funcionar.
                 El Nivel sí {caps.accelerometer?"funciona porque tiene acelerómetro.":""}
+              </div>
+            )}
+
+            {/* Tips específicos del sistema */}
+            {caps.brand?.tips?.length > 0 && (
+              <div style={{ ...glass(caps.brand.ui==="miui"?C.amber:C.blue, 0.06),
+                            borderRadius:12, padding:"14px 16px",
+                            border:`1px solid rgba(${rgb(caps.brand.ui==="miui"?C.amber:C.blue)},0.2)` }}>
+                <div style={{ fontFamily:MONO, fontSize:9, color:caps.brand.ui==="miui"?C.amber:C.blue,
+                              fontWeight:700, letterSpacing:2, marginBottom:10 }}>
+                  AJUSTES RECOMENDADOS PARA {caps.brand.brand.toUpperCase()}
+                </div>
+                {caps.brand.tips.map((t,i) => (
+                  <div key={i} style={{ fontFamily:MONO, fontSize:10, color:C.dim,
+                                        lineHeight:1.9 }}>{t}</div>
+                ))}
+              </div>
+            )}
+
+            {/* Jack no detectado — mostrar alternativas */}
+            {!caps.jack && (
+              <div style={{ ...glass(C.orange, 0.06), borderRadius:12, padding:"14px 16px",
+                            border:`1px solid rgba(${rgb(C.orange)},0.2)` }}>
+                <div style={{ fontFamily:MONO, fontSize:9, color:C.orange, fontWeight:700,
+                              letterSpacing:2, marginBottom:8 }}>SIN JACK 3.5mm — ALTERNATIVAS</div>
+                {["🔷 Módulos BLE: sensores que se conectan por Bluetooth Low Energy",
+                  "🔌 Adaptador USB-C a 3.5mm: permite usar módulos jack en celulares sin jack",
+                  "📡 Módulos WiFi: basados en ESP32, se comunican por la red local",
+                  "⚡ Módulos USB-C: conexión directa de datos + alimentación 5V"].map((t,i)=>(
+                  <div key={i} style={{ fontFamily:MONO, fontSize:10, color:C.dim, lineHeight:1.9 }}>{t}</div>
+                ))}
               </div>
             )}
 
@@ -2781,8 +2944,24 @@ function ToolSistema() {
         tips={netTips}
       />
 
+      {/* Tips por marca del sistema */}
+      {(() => {
+        const b = detectBrand();
+        return b.tips?.length > 0 ? (
+          <div style={{ ...glass(C.amber,0.06), borderRadius:12, padding:"14px 16px",
+                        border:`1px solid rgba(${rgb(C.amber)},0.2)` }}>
+            <div style={{ fontFamily:MONO, fontSize:9, color:C.amber, fontWeight:700,
+                          letterSpacing:2, marginBottom:8 }}>
+              AJUSTES PARA {b.brand.toUpperCase()} ({b.ui.toUpperCase()})
+            </div>
+            {b.tips.map((t,i) => (
+              <div key={i} style={{ fontFamily:MONO, fontSize:10, color:C.dim, lineHeight:1.9 }}>{t}</div>
+            ))}
+          </div>
+        ) : null;
+      })()}
       <div style={S.note}>
-        La limpieza de caché elimina recursos guardados por SEM Tools (service worker). La app los vuelve a descargar al próximo uso. No borra datos del sistema ni de otras apps.
+        La limpieza de caché elimina recursos guardados por SEM Tools (service worker). No borra datos del sistema ni de otras apps.
       </div>
     </div>
   );
