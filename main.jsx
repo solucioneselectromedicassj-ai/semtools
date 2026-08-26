@@ -2960,31 +2960,42 @@ function ModulePlaceholder({icon,title,why,when}) {
 // ── Home ──────────────────────────────────────────────────────────────────────
 function Home({onSel, caps}) {
   const [sector,setSector]=React.useState(null);
+
   if(sector){
     const bl=BLOCKS.find(b=>b.id===sector);
+    if(!bl) return null;
     return (
       <div style={S.wrap}>
-        <button style={{...S.btn("s"),display:"flex",alignItems:"center",gap:8,textAlign:"left"}}
+        <button style={{...S.btn("s"),display:"flex",alignItems:"center",gap:8}}
           onClick={()=>setSector(null)}>
-          <span>←</span> {bl.icon} {bl.label}
+          ← {bl.icon} {bl.label}
         </button>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
           {bl.tools.map(tid=>{
-            const t=TOOL[tid]; const disabled=tid==="tacometro";
+            const t=TOOL[tid];
+            if(!t) return null;
+            const disabled = tid==="tacometro";
+            const needs    = (TOOL_NEEDS&&TOOL_NEEDS[tid]?.needs)||[];
+            const missing  = (caps&&!disabled) ? needs.filter(n=>!caps[n]) : [];
+            const cantRun  = missing.length>0;
+            const op       = disabled?0.5:cantRun?0.45:1;
             return (
-              <div key={tid} style={{...S.card(t.col),opacity:disabled||cantRun?.5:1,flexDirection:"column",alignItems:"flex-start",minHeight:110}}
-                onClick={()=>!disabled&&!cantRun&&onSel(tid)}>
-                <div style={{fontSize:32,filter:`drop-shadow(0 0 10px ${t.col}88)`,marginBottom:6}}>{t.icon}</div>
-                <div style={{fontFamily:MONO,fontSize:12,fontWeight:700,color:C.text,lineHeight:1.3,marginBottom:4}}>{t.label}</div>
-                <div style={{fontSize:10,color:C.dim,lineHeight:1.5}}>{t.sub}</div>
-                {disabled&&<div style={{marginTop:8}}><span style={S.pill(C.green)}>módulo</span></div>}
-                {cantRun&&!disabled&&(
-                  <div style={{marginTop:6}}>
-                    <span style={S.pill(C.red)}>
-                      ✗ {(TOOL_NEEDS[tid]?.needs||[]).filter(n=>!caps[n]).join(" + ")} requerido
-                    </span>
-                  </div>
-                )}
+              <div key={tid}
+                style={{...S.card(t.col),opacity:op,flexDirection:"column",
+                  alignItems:"flex-start",minHeight:110,
+                  cursor:(disabled||cantRun)?"default":"pointer"}}
+                onClick={()=>{ if(!disabled&&!cantRun) onSel(tid); }}>
+                <div style={{fontSize:30,marginBottom:6,
+                  filter:`drop-shadow(0 0 8px ${t.col}88)`}}>
+                  {cantRun?"🔒":t.icon}
+                </div>
+                <div style={{fontFamily:MONO,fontSize:12,fontWeight:700,
+                  color:cantRun?C.dim:C.text,marginBottom:3}}>{t.label}</div>
+                <div style={{fontSize:10,color:C.dim,lineHeight:1.45}}>{t.sub}</div>
+                {disabled&&<div style={{marginTop:6}}><span style={S.pill(C.green)}>módulo</span></div>}
+                {cantRun&&<div style={{marginTop:6}}>
+                  <span style={S.pill(C.red)}>sin {missing.join(" + ")}</span>
+                </div>}
               </div>
             );
           })}
@@ -2992,62 +3003,37 @@ function Home({onSel, caps}) {
       </div>
     );
   }
+
   return (
     <div style={{display:"flex",flexDirection:"column",gap:12,paddingBottom:8}}>
-      <div style={{fontFamily:MONO,fontSize:9,color:C.dim,letterSpacing:2,textAlign:"center",paddingBottom:4}}>SELECCIONÁ UN BLOQUE</div>
+      <div style={{fontFamily:MONO,fontSize:9,color:C.dim,letterSpacing:2,
+        textAlign:"center",paddingBottom:4}}>SELECCIONÁ UN BLOQUE</div>
       {BLOCKS.map(bl=>(
         <button key={bl.id} style={{
-          border:`1px solid rgba(${rgb(bl.col)},0.3)`, borderLeft:`4px solid ${bl.col}`,
-          borderRadius:14, padding:"18px 20px",
+          border:`1px solid rgba(${rgb(bl.col)},0.3)`,
+          borderLeft:`4px solid ${bl.col}`,
+          borderRadius:14,padding:"18px 20px",
           background:`rgba(${rgb(bl.col)},0.07)`,
-          cursor:"pointer", display:"flex", alignItems:"center", gap:16,
+          cursor:"pointer",display:"flex",alignItems:"center",gap:16,
           boxShadow:`0 2px 20px rgba(0,0,0,0.3)`,
-          backdropFilter:"blur(10px)", textAlign:"left", width:"100%",
+          backdropFilter:"blur(10px)",textAlign:"left",width:"100%",
         }} onClick={()=>setSector(bl.id)}>
           <div style={{fontSize:36,filter:`drop-shadow(0 0 12px ${bl.col}99)`}}>{bl.icon}</div>
           <div style={{flex:1}}>
             <div style={{fontFamily:MONO,fontSize:14,fontWeight:700,color:bl.col,
               textShadow:`0 0 14px ${bl.col}88`,letterSpacing:1,marginBottom:4}}>{bl.label}</div>
             <div style={{fontFamily:MONO,fontSize:10,color:C.dim,lineHeight:1.6}}>
-              {bl.tools.map(tid=>TOOL[tid]?.icon).join("  ")}
+              {bl.tools.map(tid=>TOOL[tid]?.icon).filter(Boolean).join("  ")}
               {" · "}{bl.tools.length} herramienta{bl.tools.length>1?"s":""}
             </div>
           </div>
           <div style={{fontFamily:MONO,fontSize:22,color:`rgba(${rgb(bl.col)},0.5)`}}>›</div>
         </button>
       ))}
-      <div style={{fontFamily:MONO,fontSize:8,color:C.dim,textAlign:"center",letterSpacing:2,paddingTop:8}}>SEM TOOLS v2</div>
+      <div style={{fontFamily:MONO,fontSize:8,color:C.dim,textAlign:"center",
+        letterSpacing:2,paddingTop:8}}>SEM TOOLS v2</div>
     </div>
   );
-}
-
-// ── App ───────────────────────────────────────────────────────────────────────
-function getView(tool) {
-  switch(tool) {
-    case "resistencias": return <ToolResistencias key={tool}/>;
-    case "integrados":   return <ToolIntegrado key={tool}/>;
-    case "distancia":    return <ToolDistancia key={tool}/>;
-    case "decibeles":    return <ToolDecibeles key={tool}/>;
-    case "nivel":        return <ToolNivel key={tool}/>;
-    case "brujula":      return <ToolBrujula key={tool}/>;
-    case "oscilo":       return <ToolOscilo key={tool}/>;
-    case "red":          return <ToolRed key={tool}/>;
-    case "sistema":      return <ToolSistema key={tool}/>;
-    case "endoscopio":   return <ToolEndoscopio key={tool}/>;
-    case "qr":           return <ToolQR key={tool}/>;
-    case "ir":           return <ToolIR key={tool}/>;
-    case "modulos":      return <ToolModulos key={tool}/>;
-    case "jack_thermo":  return <ToolJackSensor key={tool} modId="jack_thermo"/>;
-    case "jack_thermo2": return <ToolJackSensor key={tool} modId="jack_thermo2"/>;
-    case "jack_air":     return <ToolJackSensor key={tool} modId="jack_air"/>;
-    case "jack_volt":    return <ToolJackSensor key={tool} modId="jack_volt"/>;
-    case "jack_light":   return <ToolJackSensor key={tool} modId="jack_light"/>;
-    case "jack_raw":     return <ToolJackSensor key={tool} modId="jack_raw"/>;
-    case "tacometro":    return <ModulePlaceholder key={tool} icon="⚙️" title="Tacómetro Estroboscópico"
-      why={"El efecto estroboscópico puede desencadenar convulsiones.\nRequiere módulo externo con LED controlado."}
-      when="LED IR + fotodetector vía USB-C · En desarrollo"/>;
-    default: return null;
-  }
 }
 
 function App() {
