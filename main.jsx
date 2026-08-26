@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import ReactDOM from "react-dom/client";
-import { Volume2,Crosshair,Compass,Activity,Wrench,QrCode,Radio,Video,Camera,Cpu,Ruler,Thermometer,Wind,Zap,Sun,Plug,Settings,Settings2,Package,Package2,Signal,Search,Bluetooth,Globe,Wifi,MapPin,Network,Waves,FlaskConical,Layers,BarChart3,Smartphone,Database } from "lucide-react";
 
 // ── Service Worker ──────────────────────────────────────────────────────────
 if ('serviceWorker' in navigator) {
@@ -13,45 +12,51 @@ const glow = (h,a=0.45) => h?`0 0 22px rgba(${rgb(h)},${a})`:'none';
 const glass = (h,a=0.06) => ({ background:`rgba(${rgb(h)},${a})`, backdropFilter:"blur(10px)", WebkitBackdropFilter:"blur(10px)" });
 
 
-// ── Sistema de íconos unificado ───────────────────────────────────────────────
-const ICON_MAP = {
-  decibeles:    Volume2,
-  nivel:        Crosshair,
-  brujula:      Compass,
-  oscilo:       Activity,
-  sistema:      Settings,
-  qr:           QrCode,
-  ir:           Radio,
-  endoscopio:   Video,
-  resistencias: FlaskConical,
-  integrados:   Cpu,
-  distancia:    Ruler,
-  jack_thermo:  Thermometer,
-  jack_thermo2: Layers,
-  jack_air:     Wind,
-  jack_volt:    Zap,
-  jack_light:   Sun,
-  jack_raw:     Waves,
-  red:          Wifi,
-  ping:         Activity,
-  lan:          Network,
-  http:         Globe,
-  ble:          Bluetooth,
-  ipinfo:       MapPin,
-  modulos:      Package,
-  tacometro:    Settings2,
-  // bloques
-  celular:      Smartphone,
-  camara:       Camera,
-  jack:         Plug,
-  celularplus:  Signal,
-  modulos_bl:   Package2,
+// ── Sistema de íconos SVG inline (sin dependencias externas) ─────────────────
+const SVG_PATHS = {
+  decibeles:    ["M11 5L6 9H2v6h4l5 4V5z","M15.54 8.46a5 5 0 0 1 0 7.07","M19.07 4.93a10 10 0 0 1 0 14.14"],
+  nivel:        ["M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20z","M12 8v4l3 3","M4.93 4.93l1.41 1.41M19.07 4.93l-1.41 1.41M4.93 19.07l1.41-1.41M19.07 19.07l-1.41-1.41M2 12h2M20 12h2"],
+  brujula:      ["M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20z","M16.24 7.76l-2.12 6.36-6.36 2.12 2.12-6.36 6.36-2.12z"],
+  oscilo:       ["M22 12h-4l-3 9L9 3l-3 9H2"],
+  sistema:      ["M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20z","M12 8v4","M12 16h.01"],
+  qr:           ["M3 3h6v6H3z","M15 3h6v6h-6z","M3 15h6v6H3z","M15 15h.01","M21 15h.01","M15 21h.01","M21 21h.01","M21 18h-3","M18 21v-3"],
+  ir:           ["M5 12.55a11 11 0 0 1 14.08 0","M1.42 9a16 16 0 0 1 21.16 0","M8.53 16.11a6 6 0 0 1 6.95 0","M12 20h.01"],
+  endoscopio:   ["M23 7l-7 5 7 5V7z","M1 5h15a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H1V5z"],
+  resistencias: ["M10 2L3 12h18L14 2z","M12 12v10","M8 22h8"],
+  integrados:   ["M9 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2h-4","M9 3v18","M3 9h6","M3 15h6","M15 9h6","M15 15h6"],
+  distancia:    ["M21 3H3","M21 21H3","M3 3v18","M21 3v18","M9 12h6","M12 9l3 3-3 3"],
+  jack_thermo:  ["M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4.5 4.5 0 1 0 5 0z"],
+  jack_thermo2: ["M9 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a3.5 3.5 0 1 0 5 0z","M15 14.76V7.5a2.5 2.5 0 0 1 5 0v7.26a3.5 3.5 0 1 1-5 0z"],
+  jack_air:     ["M9.59 4.59A2 2 0 1 1 11 8H2","M10.59 11.41A2 2 0 1 0 14 16H2","M15.73 8.73A2.5 2.5 0 1 1 19.5 12H2"],
+  jack_volt:    ["M13 2L3 14h9l-1 8 10-12h-9l1-8z"],
+  jack_light:   ["M12 1v2","M12 21v2","M4.22 4.22l1.42 1.42","M18.36 18.36l1.42 1.42","M1 12h2","M21 12h2","M4.22 19.78l1.42-1.42","M18.36 5.64l1.42-1.42","M12 5a7 7 0 1 0 0 14 7 7 0 0 0 0-14z"],
+  jack_raw:     ["M2 12c2-4 4-6 6-6s4 8 6 8 4-2 6-2"],
+  red:          ["M5 12.55a11 11 0 0 1 14.08 0","M1.42 9a16 16 0 0 1 21.16 0","M8.53 16.11a6 6 0 0 1 6.95 0","M12 20h.01"],
+  ping:         ["M22 12h-4l-3 9L9 3l-3 9H2"],
+  lan:          ["M9 3H5a2 2 0 0 0-2 2v4","M9 3h10a2 2 0 0 1 2 2v4","M9 3v18","M3 9h18","M5 21h14a2 2 0 0 0 2-2V9"],
+  http:         ["M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20z","M12 8v8","M8 12h8"],
+  ble:          ["M6.5 6.5l11 11","M6.5 17.5l11-11","M12 2v4","M12 18v4"],
+  ipinfo:       ["M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z","M12 13a3 3 0 1 0 0-6 3 3 0 0 0 0 6z"],
+  modulos:      ["M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z","M3.27 6.96L12 12l8.73-5.05","M12 22.08V12"],
+  tacometro:    ["M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20z","M12 12l4-4"],
+  celular:      ["M17 2H7a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2z","M12 18h.01"],
+  camara:       ["M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z","M12 17a4 4 0 1 0 0-8 4 4 0 0 0 0 8z"],
+  jack:         ["M12 2v8","M8 6H4","M20 6h-4","M12 10a4 4 0 1 0 0 8 4 4 0 0 0 0-8z","M12 18v4"],
+  celularplus:  ["M1 6l4.5 4.5","M22.5 6l-4.5 4.5","M5.5 10.5l3 3","M19.5 10.5l-3 3","M8.5 13.5l3 3","M15.5 13.5l-3 3","M12 17h.01"],
+  modulos_bl:   ["M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8","M12 22V12","M3 8l9 5 9-5","M7 21h10a2 2 0 0 0 2-2v-6"],
+  nfc:          ["M3 7V5a2 2 0 0 1 2-2h2","M17 3h2a2 2 0 0 1 2 2v2","M21 17v2a2 2 0 0 1-2 2h-2","M7 21H5a2 2 0 0 1-2-2v-2","M12 12m-2 0a2 2 0 1 0 4 0 2 2 0 0 0-4 0","M8 8a6 6 0 0 0 0 8","M16 8a6 6 0 0 1 0 8"],
 };
 
 function ToolIcon({ id, size=26, color, strokeWidth=1.6, style={} }) {
-  const Comp = ICON_MAP[id];
-  if (!Comp) return null;
-  return <Comp size={size} color={color||"currentColor"} strokeWidth={strokeWidth} style={style}/>;
+  const paths = SVG_PATHS[id];
+  if (!paths) return null;
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
+      stroke={color||"currentColor"} strokeWidth={strokeWidth}
+      strokeLinecap="round" strokeLinejoin="round" style={style}>
+      {paths.map((d,i) => <path key={i} d={d}/>)}
+    </svg>
+  );
 }
 
 // ── Tokens ────────────────────────────────────────────────────────────────────
