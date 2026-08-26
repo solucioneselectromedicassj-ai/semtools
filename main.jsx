@@ -3752,6 +3752,23 @@ function App() {
 
   useEffect(()=>{ getDeviceInfo().then(setDevInfo); },[]);
 
+  // Modo solar: inyectar estilos globales
+  useEffect(()=>{
+    let style = document.getElementById("solar-style");
+    if(!style){ style=document.createElement("style"); style.id="solar-style"; document.head.appendChild(style); }
+    if(hiContrast){
+      style.textContent = `
+        * { color: #0A1020 !important; border-color: rgba(10,16,32,0.25) !important; }
+        [style*="background: rgb(7, 9, 15)"], [style*="background: linear-gradient"] { background: #F0F4FF !important; }
+        [style*="rgba(0,0,0"] { background: #E8EDF8 !important; }
+        [style*="#07090F"], [style*="#0D1829"], [style*="#080B14"], [style*="rgba(0, 0, 0"] { background: #E8EDF8 !important; }
+        canvas { filter: invert(1) hue-rotate(180deg); }
+      `;
+    } else {
+      style.textContent = "";
+    }
+  },[hiContrast]);
+
   useEffect(()=>{
     const l=document.createElement("link"); l.rel="stylesheet";
     l.href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap";
@@ -3783,11 +3800,13 @@ function App() {
             🔑
           </button>
         )}
-        <button style={{border:"none",background:hiContrast?"rgba(255,184,48,0.2)":"rgba(255,255,255,0.06)",
-          borderRadius:8,padding:"6px 8px",cursor:"pointer",fontSize:14,
-          boxShadow:hiContrast?`0 0 10px ${C.amber}66`:"none"}}
-          onClick={()=>setHiContrast(h=>!h)} title="Modo solar">
-          ☀️
+        <button style={{border:hiContrast?`2px solid ${C.amber}`:"1px solid rgba(255,255,255,0.15)",
+          borderRadius:8,padding:"6px 10px",cursor:"pointer",fontSize:14,
+          background:hiContrast?C.amber:"rgba(255,255,255,0.06)",
+          boxShadow:hiContrast?`0 0 14px ${C.amber}`:"none",
+          transition:"all .2s"}}
+          onClick={()=>setHiContrast(h=>!h)} title={hiContrast?"Modo nocturno":"Modo solar"}>
+          {hiContrast?"🌙":"☀️"}
         </button>
       </div>
       <div style={S.body}>
