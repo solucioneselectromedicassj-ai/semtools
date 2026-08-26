@@ -3482,6 +3482,42 @@ function ModulePlaceholder({icon,title,why,when}) {
 }
 
 // ── Home ──────────────────────────────────────────────────────────────────────
+
+// ── Qué sensor necesita cada herramienta ─────────────────────────────────────
+const TOOL_NEEDS = {
+  decibeles:    { needs:["microphone"],             label:"Decibelímetro"      },
+  nivel:        { needs:["accelerometer"],           label:"Nivel"              },
+  brujula:      { needs:["magnetometer"],            label:"Brújula"            },
+  oscilo:       { needs:["microphone"],              label:"Osciloscopio"       },
+  sistema:      { needs:[],                          label:"Sistema"            },
+  qr:           { needs:["camera"],                  label:"QR / Código Barras" },
+  ir:           { needs:["camera"],                  label:"Control Remoto IR"  },
+  endoscopio:   { needs:["camera"],                  label:"Endoscopio / USB"   },
+  nfc:          { needs:["nfc"],                     label:"NFC"                },
+  resistencias: { needs:["camera","ai"],             label:"Resistencias"       },
+  integrados:   { needs:["camera","ai"],             label:"Integrados IC"      },
+  distancia:    { needs:["camera"],                  label:"Distancia"          },
+  jack_thermo:  { needs:["microphone","jack"],       label:"Temperatura"        },
+  jack_thermo2: { needs:["microphone","jack"],       label:"Dual Temp"          },
+  jack_air:     { needs:["microphone","jack"],       label:"Flujo Aire"         },
+  jack_volt:    { needs:["microphone","jack"],       label:"Voltaje CC"         },
+  jack_light:   { needs:["microphone","jack"],       label:"Luminosidad"        },
+  jack_raw:     { needs:["microphone","jack"],       label:"Señal Cruda"        },
+  red:          { needs:[],                          label:"Red / Internet"     },
+  ping:         { needs:[],                          label:"Ping"               },
+  lan:          { needs:[],                          label:"Escáner LAN"        },
+  http:         { needs:[],                          label:"HTTP Tester"        },
+  ble:          { needs:[],                          label:"Scanner BLE"        },
+  ipinfo:       { needs:[],                          label:"IP / ISP"           },
+  modulos:      { needs:[],                          label:"Módulos"            },
+  tacometro:    { needs:[],                          label:"Tacómetro"          },
+};
+
+function toolEnabled(toolId, caps) {
+  const needs = TOOL_NEEDS[toolId]?.needs || [];
+  return needs.every(n => caps[n]);
+}
+
 function Home({onSel, caps}) {
   const [sector,setSector]=React.useState(null);
 
