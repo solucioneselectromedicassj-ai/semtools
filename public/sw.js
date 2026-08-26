@@ -1,4 +1,4 @@
-const CACHE = 'sem-tools-v1';
+const CACHE = 'sem-tools-v4';
 const PRECACHE = ['/', '/main.jsx', '/icon-192.png', '/icon-512.png', '/manifest.json'];
 
 self.addEventListener('install', e => {
