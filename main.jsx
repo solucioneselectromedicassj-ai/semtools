@@ -3037,6 +3037,39 @@ function Home({onSel, caps}) {
 }
 
 
+
+// ── Router de herramientas ────────────────────────────────────────────────────
+function getView(tool) {
+  switch(tool) {
+    case "resistencias":  return <ToolResistencias key={tool}/>;
+    case "integrados":    return <ToolIntegrado key={tool}/>;
+    case "distancia":     return <ToolDistancia key={tool}/>;
+    case "decibeles":     return <ToolDecibeles key={tool}/>;
+    case "nivel":         return <ToolNivel key={tool}/>;
+    case "brujula":       return <ToolBrujula key={tool}/>;
+    case "oscilo":        return <ToolOscilo key={tool}/>;
+    case "red":           return <ToolRed key={tool}/>;
+    case "sistema":       return <ToolSistema key={tool}/>;
+    case "qr":            return <ToolQR key={tool}/>;
+    case "ir":            return <ToolIR key={tool}/>;
+    case "endoscopio":    return <ToolEndoscopio key={tool}/>;
+    case "modulos":       return <ToolModulos key={tool}/>;
+    case "jack_thermo":   return <ToolJackSensor key={tool} modId="jack_thermo"/>;
+    case "jack_thermo2":  return <ToolJackSensor key={tool} modId="jack_thermo2"/>;
+    case "jack_air":      return <ToolJackSensor key={tool} modId="jack_air"/>;
+    case "jack_volt":     return <ToolJackSensor key={tool} modId="jack_volt"/>;
+    case "jack_light":    return <ToolJackSensor key={tool} modId="jack_light"/>;
+    case "jack_raw":      return <ToolJackSensor key={tool} modId="jack_raw"/>;
+    case "tacometro":
+      return <ModulePlaceholder key={tool} icon="⚙️" title="Tacómetro Estroboscópico"
+        why={"El efecto estroboscópico puede desencadenar convulsiones.\nRequiere módulo externo con LED controlado."}
+        when="LED IR + fotodetector vía USB-C · En desarrollo"/>;
+    default: return <div style={{padding:20,fontFamily:"monospace",color:"#E2E8FF"}}>
+      Herramienta "{tool}" no encontrada
+    </div>;
+  }
+}
+
 // ── Error Boundary ────────────────────────────────────────────────────────────
 class ErrorBoundary extends React.Component {
   constructor(props){ super(props); this.state={err:null}; }
