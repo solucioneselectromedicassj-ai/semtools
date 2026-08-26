@@ -283,7 +283,10 @@ function CameraView({ captureLabel="📷 Capturar", onCapture }) {
 
 // ── Device Compatibility Check ────────────────────────────────────────────────
 function Onboarding({ onDone }) {
-  const [step,    setStep]    = useState(1); // 1=apikey, 2=sensors, 3=results
+  const [step,    setStep]    = useState(()=>{
+    try{ return localStorage.getItem("sem_gemini_key") ? 2 : 1; }
+    catch(_e){ return 1; }
+  });
   const [key,     setKey]     = useState("");
   const [testing, setTesting] = useState(false);
   const [err,     setErr]     = useState(null);
@@ -2645,9 +2648,10 @@ function ToolSistema() {
         </div>
         <button style={{...S.btn("p",C.cyan)}} onClick={()=>{
           try{localStorage.removeItem("sem_caps");}catch(_e){}
+          // Ir al onboarding (saltará directo al paso 2 ya que hay key)
           window.location.reload();
         }}>
-          🔬 Re-ejecutar diagnóstico completo
+          🔬 Re-ejecutar test de sensores
         </button>
       </div>
 
