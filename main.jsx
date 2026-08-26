@@ -25,6 +25,7 @@ const TOOL = {
   nivel:        { icon:"⦿",  label:"Nivel",           sub:"Burbuja 2D · horizonte · auto-start",  col:C.cyan   },
   brujula:      { icon:"🧭", label:"Brújula",         sub:"Magnetómetro · rumbo · auto-start",    col:C.cyan   },
   sistema:      { icon:"🔧", label:"Sistema",         sub:"Limpieza · benchmark · optimización",   col:C.cyan   },
+  endoscopio:   { icon:"🔭", label:"Cámara / Endoscopio",sub:"USB · foto · video · linterna",        col:C.blue   },
   qr:           { icon:"⬛", label:"QR / Código Barras",sub:"Leer · generar · historial",           col:C.green  },
   ir:           { icon:"📡", label:"Control Remoto",  sub:"Detector IR · LAN · módulo TX",         col:C.violet },
   oscilo:       { icon:"〜", label:"Osciloscopio",    sub:"Audio · FFT · captura automática",     col:C.cyan   },
@@ -44,7 +45,7 @@ const TOOL = {
 
 const BLOCKS = [
   { id:"celular",  icon:"📱", label:"CELULAR",     col:C.cyan,   tools:["decibeles","nivel","brujula","oscilo","sistema","qr","ir"] },
-  { id:"camara",   icon:"📷", label:"CÁMARA + IA", col:C.violet, tools:["resistencias","integrados","distancia"] },
+  { id:"camara",   icon:"📷", label:"CÁMARA + IA", col:C.violet, tools:["resistencias","integrados","distancia","endoscopio"] },
   { id:"jack",     icon:"🔌", label:"JACK 3.5mm",  col:C.orange, tools:["jack_thermo","jack_thermo2","jack_air","jack_volt","jack_light","jack_raw"] },
   { id:"celularplus", icon:"📶", label:"CONECTIVIDAD", col:C.blue, tools:["red"] },
   { id:"modulos",  icon:"📡", label:"MÓDULOS",     col:C.green,  tools:["tacometro","modulos"] },
@@ -1118,6 +1119,138 @@ function ToolNivel() {
   );
 }
 
+
+// ── Test real de sensores del hardware ───────────────────────────────────────
+function SensorTester({ onResult }) {
+  const [state, setState] = useState("idle"); // idle | running | done
+  const [res,   setRes]   = useState(null);
+
+  const run = async () => {
+    setState("running");
+    const result = { accel: false, gyro: false, mag: false,
+                     magValues: [], accelMax: 0, details: {} };
+
+    await new Promise(resolve => {
+      const motionH = e => {
+        const ag = e.accelerationIncludingGravity;
+        if (ag && (ag.x !== null || ag.y !== null || ag.z !== null)) {
+          result.accel = true;
+          const mag = Math.sqrt((ag.x||0)**2+(ag.y||0)**2+(ag.z||0)**2);
+          result.accelMax = Math.max(result.accelMax, mag);
+          result.details.accelX = ag.x?.toFixed(2);
+          result.details.accelY = ag.y?.toFixed(2);
+          result.details.accelZ = ag.z?.toFixed(2);
+        }
+        if (e.rotationRate?.alpha !== null) result.gyro = true;
+      };
+      const oriH = e => {
+        if (e.alpha !== null && e.alpha !== undefined) {
+          result.magValues.push(e.alpha);
+          result.details.alpha = e.alpha?.toFixed(1);
+          result.details.beta  = e.beta?.toFixed(1);
+          result.details.gamma = e.gamma?.toFixed(1);
+        }
+      };
+      const absH = e => {
+        if (e.alpha !== null && e.alpha !== undefined && e.absolute) {
+          result.magValues.push(e.alpha);
+          result.details.absAlpha = e.alpha?.toFixed(1);
+        }
+      };
+      window.addEventListener("devicemotion",      motionH, true);
+      window.addEventListener("deviceorientation", oriH,    true);
+      window.addEventListener("deviceorientationabsolute", absH, true);
+      setTimeout(() => {
+        window.removeEventListener("devicemotion",      motionH, true);
+        window.removeEventListener("deviceorientation", oriH,    true);
+        window.removeEventListener("deviceorientationabsolute", absH, true);
+        // Magnetómetro real: alpha debe variar o ser absoluto
+        const vals = result.magValues;
+        const range = vals.length > 1
+          ? Math.max(...vals) - Math.min(...vals) : 0;
+        // Si hay valores absolutos o la variación > 2° → hay magnetómetro
+        result.mag = vals.length > 0 && (result.details.absAlpha !== undefined || range > 0.1);
+        resolve();
+      }, 3500);
+    });
+
+    setRes(result);
+    setState("done");
+    onResult?.(result);
+  };
+
+  const Label = ({ok, label, detail}) => (
+    <div style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 0",
+                  borderBottom:`1px solid ${C.bord}` }}>
+      <div style={{ width:32, height:32, borderRadius:"50%", flexShrink:0,
+                    background:`rgba(${rgb(ok?C.green:C.red)},0.15)`,
+                    border:`2px solid ${ok?C.green:C.red}`,
+                    display:"flex", alignItems:"center", justifyContent:"center",
+                    fontSize:16, boxShadow:`0 0 10px ${ok?C.green:C.red}66` }}>
+        {ok ? "✓" : "✗"}
+      </div>
+      <div style={{ flex:1 }}>
+        <div style={{ fontFamily:MONO, fontSize:12, fontWeight:700,
+                      color:ok?C.green:C.red, textShadow:`0 0 8px ${ok?C.green:C.red}66` }}>
+          {label}
+        </div>
+        {detail && <div style={{ fontFamily:MONO, fontSize:9, color:C.dim, marginTop:2 }}>{detail}</div>}
+      </div>
+      <div style={S.pill(ok?C.green:C.red)}>{ok?"Disponible":"No detectado"}</div>
+    </div>
+  );
+
+  return (
+    <div>
+      {state === "idle" && (
+        <button style={{ ...S.btn("p", C.amber), display:"flex", alignItems:"center",
+                         gap:8, justifyContent:"center" }} onClick={run}>
+          🔬 Probar sensores del hardware
+        </button>
+      )}
+      {state === "running" && (
+        <div style={{ ...S.disp(C.amber), textAlign:"center", padding:"20px 16px" }}>
+          <div style={{ fontFamily:MONO, fontSize:13, color:C.amber,
+                        textShadow:`0 0 12px ${C.amber}` }}>Probando sensores…</div>
+          <div style={{ fontFamily:MONO, fontSize:10, color:C.dim, marginTop:8, lineHeight:1.7 }}>
+            Mové el celular suavemente durante 3 segundos.{"\n"}
+            Giralo un poco para probar el magnetómetro.
+          </div>
+        </div>
+      )}
+      {state === "done" && res && (
+        <div style={{ ...S.disp(C.cyan), padding:"14px 16px" }}>
+          <div style={{ fontFamily:MONO, fontSize:9, color:C.cyan, fontWeight:700,
+                        letterSpacing:2, marginBottom:10 }}>RESULTADO DEL TEST</div>
+          <Label ok={res.accel} label="Acelerómetro"
+            detail={res.accel ? `Valor: ${res.accelMax.toFixed(1)} m/s² · X:${res.details.accelX} Y:${res.details.accelY} Z:${res.details.accelZ}` : "No respondió en 3.5s"} />
+          <Label ok={res.gyro} label="Giroscopio"
+            detail={res.gyro ? "Detectó rotación" : "Sin datos de rotationRate"} />
+          <Label ok={res.mag}  label="Magnetómetro (brújula)"
+            detail={res.mag
+              ? `alpha: ${res.details.absAlpha||res.details.alpha}° · ${res.magValues.length} lecturas`
+              : res.magValues.length > 0
+                ? `Recibe alpha pero sin variación — posiblemente sin magnetómetro físico (${res.magValues.length} lecturas, rango 0°)`
+                : "No respondió — sin magnetómetro o sin permiso"} />
+          {!res.mag && (
+            <div style={{ marginTop:12, fontFamily:MONO, fontSize:10, color:C.amber,
+                          lineHeight:1.8, background:`rgba(${rgb(C.amber)},0.08)`,
+                          borderRadius:8, padding:"10px 12px" }}>
+              ⚠ Tu celular no tiene magnetómetro activo.{"\n"}
+              La brújula digital no puede funcionar en este dispositivo.{"\n"}
+              Podés usar el Nivel (acelerómetro) que {res.accel?"sí funciona":"tampoco detectó datos"}.
+            </div>
+          )}
+          <button style={{ ...S.btn("s"), marginTop:12, fontSize:10 }}
+            onClick={()=>{ setState("idle"); setRes(null); }}>
+            Probar de nuevo
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Brújula ── auto-start Android ─────────────────────────────────────────────
 function ToolBrujula() {
   const col=C.cyan;
@@ -1263,8 +1396,11 @@ function ToolBrujula() {
       {on&&typeof DeviceOrientationEvent?.requestPermission==="function"&&(
         <button style={S.btn("r")} onClick={stop}>Detener</button>
       )}
+      <SensorTester onResult={r => {
+        if(!r.mag && !err) setErr("Tu celular no tiene magnetómetro — la brújula no puede funcionar en este dispositivo.");
+      }}/>
       <div style={S.note}>
-        Alejá el celular de metales y electrónica. Calibrá moviendolo en figura 8.
+        Alejá el celular de metales y electrónica. Calibrá moviéndolo en figura 8.
         La aguja roja → Norte magnético.
       </div>
     </div>
@@ -1895,6 +2031,295 @@ function ToolModulos() {
 
 
 
+
+// ── Cámara Endoscopio / USB ───────────────────────────────────────────────────
+function ToolEndoscopio() {
+  const col = C.teal || C.blue;
+  const vRef=useRef(), mrRef=useRef(), chunksRef=useRef([]), timerRef=useRef();
+  const [devices,   setDevices]  = useState([]);
+  const [selDev,    setSelDev]   = useState(null);
+  const [on,        setOn]       = useState(false);
+  const [recording, setRecording]= useState(false);
+  const [recTime,   setRecTime]  = useState(0);
+  const [photos,    setPhotos]   = useState([]);
+  const [videos,    setVideos]   = useState([]);
+  const [err,       setErr]      = useState(null);
+  const [torch,     setTorch]    = useState(false);
+  const [torchOk,   setTorchOk] = useState(false);
+  const [zoom,      setZoom]     = useState(1);
+  const [zoomRange, setZoomRange]= useState(null);
+  const tkRef=useRef(null);
+
+  // Enumerar cámaras disponibles
+  const refreshDevices = async () => {
+    try {
+      await navigator.mediaDevices.getUserMedia({ video: true });
+      const devs = await navigator.mediaDevices.enumerateDevices();
+      const cams = devs.filter(d => d.kind === "videoinput");
+      setDevices(cams);
+      // Auto-seleccionar cámara externa/USB si hay más de 1
+      if (!selDev && cams.length > 0) {
+        const ext = cams.find(d =>
+          d.label && !d.label.toLowerCase().includes("front") &&
+          !d.label.toLowerCase().includes("usuario") &&
+          !d.label.toLowerCase().includes("facetime")
+        );
+        setSelDev((ext || cams[0]).deviceId);
+      }
+    } catch(e) { setErr("Sin permiso de cámara: " + e.message); }
+  };
+
+  useEffect(() => { refreshDevices(); }, []);
+
+  const start = async () => {
+    try {
+      const constraints = selDev
+        ? { video: { deviceId: { exact: selDev }, width:{ ideal:1920 }, height:{ ideal:1080 } } }
+        : { video: { facingMode:"environment", width:{ ideal:1920 } } };
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      vRef.current.srcObject = stream;
+      await vRef.current.play();
+      // Torch y zoom
+      const track = stream.getVideoTracks()[0];
+      tkRef.current = track;
+      const caps = track.getCapabilities?.() || {};
+      setTorchOk(!!caps.torch);
+      if (caps.zoom) setZoomRange({ min: caps.zoom.min, max: caps.zoom.max });
+      setOn(true); setErr(null); setRecTime(0);
+    } catch(e) { setErr("Error de cámara: " + e.message); }
+  };
+
+  const stop = () => {
+    if (recording) stopRec();
+    vRef.current?.srcObject?.getTracks().forEach(t => t.stop());
+    if (vRef.current) vRef.current.srcObject = null;
+    tkRef.current = null;
+    setOn(false); setTorch(false); setZoom(1);
+  };
+
+  const toggleTorch = async () => {
+    if (!tkRef.current) return;
+    const n = !torch;
+    try { await tkRef.current.applyConstraints({ advanced:[{ torch:n }] }); setTorch(n); }
+    catch(_e) {}
+  };
+
+  const applyZoom = async (z) => {
+    if (!tkRef.current) return;
+    setZoom(z);
+    try { await tkRef.current.applyConstraints({ advanced:[{ zoom:z }] }); }
+    catch(_e) {}
+  };
+
+  // Foto
+  const takePhoto = () => {
+    const v = vRef.current;
+    if (!v) return;
+    const c = document.createElement("canvas");
+    c.width = v.videoWidth || 1280; c.height = v.videoHeight || 720;
+    c.getContext("2d").drawImage(v, 0, 0);
+    const url = c.toDataURL("image/jpeg", 0.95);
+    const ts = new Date().toLocaleTimeString();
+    setPhotos(p => [{ url, ts }, ...p.slice(0, 19)]);
+    navigator.vibrate?.(50);
+  };
+
+  // Grabación
+  const startRec = () => {
+    const stream = vRef.current?.srcObject;
+    if (!stream) return;
+    chunksRef.current = [];
+    const mime = MediaRecorder.isTypeSupported("video/webm;codecs=vp9")
+      ? "video/webm;codecs=vp9" : "video/webm";
+    const mr = new MediaRecorder(stream, { mimeType: mime });
+    mr.ondataavailable = e => { if (e.data.size > 0) chunksRef.current.push(e.data); };
+    mr.onstop = () => {
+      const blob = new Blob(chunksRef.current, { type: "video/webm" });
+      const url = URL.createObjectURL(blob);
+      const dur = recTime;
+      setVideos(v => [{ url, ts: new Date().toLocaleTimeString(), dur }, ...v.slice(0, 9)]);
+    };
+    mr.start(200);
+    mrRef.current = mr;
+    setRecording(true); setRecTime(0);
+    timerRef.current = setInterval(() => setRecTime(t => t + 1), 1000);
+  };
+
+  const stopRec = () => {
+    mrRef.current?.stop();
+    clearInterval(timerRef.current);
+    setRecording(false);
+  };
+
+  useEffect(() => () => {
+    clearInterval(timerRef.current);
+    vRef.current?.srcObject?.getTracks().forEach(t => t.stop());
+  }, []);
+
+  const fmtTime = s => `${Math.floor(s/60).toString().padStart(2,"0")}:${(s%60).toString().padStart(2,"0")}`;
+
+  return (
+    <div style={S.wrap}>
+      <div style={S.st(col)}>▸ Cámara Endoscopio / USB</div>
+
+      {/* Selector de cámara */}
+      <div style={{ ...S.disp(col), padding:"12px 14px" }}>
+        <div style={{ fontFamily:MONO, fontSize:9, color:col, fontWeight:700, marginBottom:8, letterSpacing:2 }}>
+          SELECCIONAR CÁMARA
+        </div>
+        <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
+          {devices.map((d, i) => {
+            const isExt = d.label && !d.label.toLowerCase().includes("front") &&
+                          !d.label.toLowerCase().includes("usuario");
+            return (
+              <button key={d.deviceId} style={{
+                border: selDev===d.deviceId ? `2px solid ${col}` : `1px solid ${C.bord}`,
+                borderRadius:10, padding:"10px 14px",
+                background: selDev===d.deviceId ? `rgba(${rgb(col)},0.12)` : "rgba(255,255,255,0.04)",
+                cursor:"pointer", display:"flex", alignItems:"center", gap:10, textAlign:"left",
+                boxShadow: selDev===d.deviceId ? `0 0 12px rgba(${rgb(col)},0.25)` : "none",
+              }} onClick={() => { setSelDev(d.deviceId); if (on) { stop(); setTimeout(start, 200); } }}>
+                <span style={{ fontSize:20 }}>{isExt ? "🔌" : i===0 ? "📷" : "🤳"}</span>
+                <div>
+                  <div style={{ fontFamily:MONO, fontSize:11, fontWeight:700, color:C.text }}>
+                    {d.label || `Cámara ${i + 1}`}
+                  </div>
+                  {isExt && <div style={S.pill(col)}>Externa / USB</div>}
+                </div>
+              </button>
+            );
+          })}
+          <button style={{ ...S.btn("s"), fontSize:10 }} onClick={refreshDevices}>
+            🔄 Actualizar lista de cámaras
+          </button>
+        </div>
+      </div>
+
+      {/* Visor de video */}
+      <div style={{ position:"relative", borderRadius:12, overflow:"hidden",
+                    border:`2px solid ${recording ? C.red : `rgba(${rgb(col)},0.4)`}`,
+                    boxShadow: recording ? `0 0 20px ${C.red}66` : "none",
+                    transition:"all .3s", background:"#000" }}>
+        <video ref={vRef} style={{ width:"100%", display:"block", maxHeight:300,
+                                    objectFit:"contain", background:"#000" }}
+          playsInline muted/>
+        {/* Indicador REC */}
+        {recording && (
+          <div style={{ position:"absolute", top:10, left:12, display:"flex",
+                        alignItems:"center", gap:6,
+                        background:"rgba(0,0,0,0.7)", borderRadius:20, padding:"4px 12px" }}>
+            <div style={{ width:8, height:8, borderRadius:"50%", background:C.red,
+                          boxShadow:`0 0 8px ${C.red}`, animation:"pulse 1s infinite" }}/>
+            <span style={{ fontFamily:MONO, fontSize:12, color:C.red, fontWeight:700 }}>
+              REC {fmtTime(recTime)}
+            </span>
+          </div>
+        )}
+        {!on && (
+          <div style={{ position:"absolute", inset:0, display:"flex", alignItems:"center",
+                        justifyContent:"center", background:"rgba(0,0,0,0.5)" }}>
+            <div style={{ fontFamily:MONO, fontSize:11, color:C.dim }}>Cámara apagada</div>
+          </div>
+        )}
+      </div>
+
+      {err && <div style={{ color:C.red, fontFamily:MONO, fontSize:10, lineHeight:1.6 }}>{err}</div>}
+
+      {/* Controles principales */}
+      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8 }}>
+        <button style={{ ...S.btn(on?"r":"p", on?C.red:col), gridColumn:"1/-1" }}
+          onClick={on ? stop : start}>
+          {on ? "⏹ Apagar cámara" : "▶ Encender cámara"}
+        </button>
+        {on && (
+          <>
+            <button style={{ ...S.btn("p", C.violet), fontSize:12, padding:"14px 8px" }}
+              onClick={takePhoto}>
+              📷 Foto
+            </button>
+            <button style={{
+              ...S.btn("p", recording ? C.red : C.orange),
+              fontSize:12, padding:"14px 8px"
+            }} onClick={recording ? stopRec : startRec}>
+              {recording ? `⏹ Parar (${fmtTime(recTime)})` : "⏺ Grabar video"}
+            </button>
+            {torchOk && (
+              <button style={{ ...S.btn("s"), background: torch ? C.amber : "rgba(255,255,255,0.07)",
+                               color: torch ? "#000" : C.text, fontSize:11 }}
+                onClick={toggleTorch}>
+                🔦 {torch ? "Linterna ON" : "Linterna OFF"}
+              </button>
+            )}
+            {zoomRange && (
+              <div style={{ display:"flex", flexDirection:"column", gap:4 }}>
+                <span style={{ fontFamily:MONO, fontSize:9, color:C.dim }}>
+                  ZOOM {zoom.toFixed(1)}×
+                </span>
+                <input type="range" min={zoomRange.min} max={zoomRange.max} step={0.1}
+                  value={zoom} style={{ width:"100%" }}
+                  onChange={e => applyZoom(parseFloat(e.target.value))} />
+              </div>
+            )}
+          </>
+        )}
+      </div>
+
+      {/* Fotos capturadas */}
+      {photos.length > 0 && (
+        <div style={S.res(C.violet)}>
+          <div style={{ fontFamily:MONO, fontSize:9, color:C.violet, fontWeight:700, marginBottom:8 }}>
+            FOTOS ({photos.length})
+          </div>
+          <div style={{ display:"flex", gap:8, overflowX:"auto", paddingBottom:4 }}>
+            {photos.map((p, i) => (
+              <div key={i} style={{ flex:"0 0 auto", display:"flex", flexDirection:"column", gap:4 }}>
+                <img src={p.url} alt="foto" style={{ width:100, borderRadius:6,
+                  border:`1px solid rgba(${rgb(C.violet)},0.4)` }}/>
+                <div style={{ fontFamily:MONO, fontSize:8, color:C.dim, textAlign:"center" }}>{p.ts}</div>
+                <a href={p.url} download={`endo_${p.ts.replace(/:/g,"-")}.jpg`}
+                  style={{ fontFamily:MONO, fontSize:9, color:C.blue, textAlign:"center" }}>⬇ Guardar</a>
+              </div>
+            ))}
+          </div>
+          <button style={{ ...S.btn("s"), marginTop:8, fontSize:10 }}
+            onClick={() => setPhotos([])}>Borrar fotos</button>
+        </div>
+      )}
+
+      {/* Videos grabados */}
+      {videos.length > 0 && (
+        <div style={S.res(C.red)}>
+          <div style={{ fontFamily:MONO, fontSize:9, color:C.red, fontWeight:700, marginBottom:8 }}>
+            VIDEOS ({videos.length})
+          </div>
+          {videos.map((v, i) => (
+            <div key={i} style={{ display:"flex", justifyContent:"space-between",
+                                   alignItems:"center", padding:"8px 0",
+                                   borderBottom: i<videos.length-1?`1px solid ${C.bord}`:"none" }}>
+              <div>
+                <div style={{ fontFamily:MONO, fontSize:11, color:C.text }}>
+                  Video {i+1} — {fmtTime(v.dur)}
+                </div>
+                <div style={{ fontFamily:MONO, fontSize:9, color:C.dim }}>{v.ts}</div>
+              </div>
+              <a href={v.url} download={`endo_video_${v.ts.replace(/:/g,"-")}.webm`}
+                style={{ ...S.btn("p", C.red), width:"auto", padding:"8px 14px",
+                         fontSize:11, textDecoration:"none" }}>
+                ⬇ Descargar
+              </a>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div style={S.note}>
+        Conectá la cámara USB/endoscopio por OTG antes de abrir la app.
+        Tocá "Actualizar lista" si no aparece. Las fotos y videos se guardan en el dispositivo.
+      </div>
+    </div>
+  );
+}
+
 // ── Lector + Generador de QR ──────────────────────────────────────────────────
 function ToolQR() {
   const col = C.green;
@@ -2396,6 +2821,7 @@ function getView(tool) {
     case "oscilo":       return <ToolOscilo key={tool}/>;
     case "red":          return <ToolRed key={tool}/>;
     case "sistema":      return <ToolSistema key={tool}/>;
+    case "endoscopio":   return <ToolEndoscopio key={tool}/>;
     case "qr":           return <ToolQR key={tool}/>;
     case "ir":           return <ToolIR key={tool}/>;
     case "modulos":      return <ToolModulos key={tool}/>;
