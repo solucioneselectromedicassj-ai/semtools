@@ -7,8 +7,8 @@ if ('serviceWorker' in navigator) {
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
-const rgb = hex => `${parseInt(hex.slice(1,3),16)},${parseInt(hex.slice(3,5),16)},${parseInt(hex.slice(5,7),16)}`;
-const glow = (h,a=0.45) => `0 0 22px rgba(${rgb(h)},${a})`;
+const rgb = hex => { if(!hex||typeof hex!=='string'||!hex.startsWith('#')) return '128,128,128'; return `${parseInt(hex.slice(1,3),16)},${parseInt(hex.slice(3,5),16)},${parseInt(hex.slice(5,7),16)}`; };
+const glow = (h,a=0.45) => h?`0 0 22px rgba(${rgb(h)},${a})`:'none';
 const glass = (h,a=0.06) => ({ background:`rgba(${rgb(h)},${a})`, backdropFilter:"blur(10px)", WebkitBackdropFilter:"blur(10px)" });
 
 // ── Tokens ────────────────────────────────────────────────────────────────────
@@ -3036,6 +3036,34 @@ function Home({onSel, caps}) {
   );
 }
 
+
+// ── Error Boundary ────────────────────────────────────────────────────────────
+class ErrorBoundary extends React.Component {
+  constructor(props){ super(props); this.state={err:null}; }
+  static getDerivedStateFromError(e){ return {err:e}; }
+  render(){
+    if(this.state.err) return (
+      <div style={{padding:20,background:"#0D1829",minHeight:"100vh",color:"#E2E8FF",fontFamily:"monospace"}}>
+        <div style={{color:"#FF3355",fontWeight:700,fontSize:14,marginBottom:12}}>
+          ⚠ Error — mandá esta info a soporte:
+        </div>
+        <div style={{background:"rgba(255,51,85,0.1)",borderRadius:8,padding:12,
+          fontSize:11,lineHeight:1.8,wordBreak:"break-all",whiteSpace:"pre-wrap",
+          border:"1px solid rgba(255,51,85,0.3)"}}>
+          {String(this.state.err)}{"\n\n"}{this.state.err?.stack?.slice(0,500)}
+        </div>
+        <button style={{marginTop:16,padding:"10px 20px",background:"#FF8C42",
+          border:"none",borderRadius:8,color:"#000",fontFamily:"monospace",
+          fontWeight:700,cursor:"pointer",fontSize:12}}
+          onClick={()=>this.setState({err:null})}>
+          ↺ Volver
+        </button>
+      </div>
+    );
+    return this.props.children;
+  }
+}
+
 function App() {
   const [tool,setTool]=useState(null);
   const [devInfo,setDevInfo]=useState(null);
@@ -3086,7 +3114,7 @@ function App() {
         )}
       </div>
       <div style={S.body}>
-        {tool===null?<Home onSel={setTool} caps={caps}/>:getView(tool)}
+        {tool===null?<Home onSel={setTool} caps={caps}/>:<ErrorBoundary key={tool}>{getView(tool)}</ErrorBoundary>}
       </div>
       <div style={S.nav}>
         <button style={S.nb(tool===null,C.amber)} onClick={()=>setTool(null)}>
