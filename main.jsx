@@ -488,6 +488,8 @@ async function runSensorDetection() {
     gyroscope:   false,
     magnetometer: false,
     ai:          false,
+    nfc:         "NDEFReader" in window,
+    jack:        true, // se asume true, difícil detectar sin probar
   };
 
   // Cámara
@@ -595,12 +597,13 @@ function Onboarding({ onDone }) {
   };
 
   const CAP_LABELS = {
-    camera:       { icon:"📷", label:"Cámara" },
-    microphone:   { icon:"🎙", label:"Micrófono" },
-    accelerometer:{ icon:"⦿",  label:"Acelerómetro" },
-    gyroscope:    { icon:"🌀", label:"Giroscopio" },
-    magnetometer: { icon:"🧭", label:"Magnetómetro" },
-    ai:           { icon:"🤖", label:"IA (Gemini)" },
+    camera:       { label:"Cámara"          },
+    microphone:   { label:"Micrófono"       },
+    accelerometer:{ label:"Acelerómetro"    },
+    gyroscope:    { label:"Giroscopio"      },
+    magnetometer: { label:"Magnetómetro"    },
+    nfc:          { label:"NFC"             },
+    ai:           { label:"IA (Gemini)"     },
   };
 
   const BG = "linear-gradient(170deg,#0D1829 0%,#152240 100%)";
@@ -748,10 +751,10 @@ function Onboarding({ onDone }) {
             <div style={{ ...S.disp(C.cyan), padding:"14px 16px" }}>
               <div style={{ fontFamily:MONO, fontSize:9, color:C.cyan, fontWeight:700,
                             letterSpacing:2, marginBottom:12 }}>SENSORES DETECTADOS</div>
-              {Object.entries(CAP_LABELS).map(([k, { icon, label }]) => (
+              {Object.entries(CAP_LABELS).map(([k, { label }]) => (
                 <div key={k} style={{ display:"flex", alignItems:"center", gap:10, padding:"8px 0",
                                       borderBottom:`1px solid ${C.bord}` }}>
-                  <span style={{ fontSize:18 }}>{icon}</span>
+                  <ToolIcon id={k==="ai"?"sistema":k==="nfc"?"nfc":k==="camera"?"endoscopio":k==="microphone"?"decibeles":k==="accelerometer"?"nivel":k==="magnetometer"?"brujula":k==="gyroscope"?"oscilo":"sistema"} size={18} color={caps[k]?C.green:C.red} strokeWidth={1.6}/>
                   <div style={{ flex:1, fontFamily:MONO, fontSize:11, color:C.text }}>{label}</div>
                   <div style={{ ...S.pill(caps[k]?C.green:C.red) }}>
                     {caps[k]?"✓ Disponible":"✗ No detectado"}
@@ -3717,6 +3720,226 @@ function Home({onSel, caps}) {
 }
 
 
+
+
+// ── NFC — Lector y escritor de tags ──────────────────────────────────────────
+function ToolNFC() {
+  const col = C.green;
+  const [mode,    setMode]    = useState("read");
+  const [reading, setReading] = useState(false);
+  const [writing, setWriting] = useState(false);
+  const [records, setRecords] = useState([]);
+  const [writeText, setWriteText] = useState("");
+  const [err,     setErr]     = useState(null);
+  const [history, setHistory] = useState([]);
+  const readerRef = useRef(null);
+
+  const hasNFC = "NDEFReader" in window;
+
+  const startRead = async () => {
+    if (!hasNFC) { setErr("NFC no disponible en este dispositivo o navegador"); return; }
+    setReading(true); setErr(null); setRecords([]);
+    try {
+      const reader = new NDEFReader();
+      readerRef.current = reader;
+      await reader.scan();
+      reader.addEventListener("reading", ({ message, serialNumber }) => {
+        const recs = message.records.map(r => {
+          let value = "";
+          try {
+            if (r.recordType === "text") {
+              const dec = new TextDecoder(r.encoding || "utf-8");
+              value = dec.decode(r.data);
+            } else if (r.recordType === "url") {
+              const dec = new TextDecoder();
+              value = dec.decode(r.data);
+            } else {
+              value = `[${r.recordType}] ${r.data?.byteLength || 0} bytes`;
+            }
+          } catch(_e) { value = "No legible"; }
+          return { type: r.recordType, value, mediaType: r.mediaType };
+        });
+        const entry = { serialNumber, records: recs, ts: new Date().toLocaleTimeString() };
+        setRecords(recs);
+        setHistory(h => [entry, ...h.slice(0, 9)]);
+        navigator.vibrate?.(150);
+      });
+      reader.addEventListener("readingerror", () => setErr("Tag NFC no legible"));
+    } catch(e) {
+      setErr("Error NFC: " + e.message);
+      setReading(false);
+    }
+  };
+
+  const stopRead = () => {
+    readerRef.current = null;
+    setReading(false); setRecords([]);
+  };
+
+  const writeTag = async () => {
+    if (!hasNFC || !writeText.trim()) return;
+    setWriting(true); setErr(null);
+    try {
+      const writer = new NDEFReader();
+      await writer.write({
+        records: [
+          writeText.startsWith("http")
+            ? { recordType: "url", data: writeText.trim() }
+            : { recordType: "text", data: writeText.trim(), lang: "es" }
+        ]
+      });
+      setErr(null);
+      setWriteText("");
+      navigator.vibrate?.([100, 50, 100]);
+      alert("✓ Tag NFC escrito correctamente");
+    } catch(e) {
+      setErr("Error al escribir: " + e.message);
+    }
+    setWriting(false);
+  };
+
+  const isURL = s => /^https?:\/\//i.test(s);
+
+  return (
+    <div style={S.wrap}>
+      <div style={S.st(col)}>▸ NFC — Near Field Communication</div>
+
+      {!hasNFC && (
+        <div style={{ ...glass(C.amber, 0.08), borderRadius:12, padding:16,
+                      border:`1px solid rgba(${rgb(C.amber)},0.3)` }}>
+          <div style={{ fontFamily:MONO, fontSize:12, fontWeight:700, color:C.amber, marginBottom:8 }}>
+            NFC no disponible en este dispositivo
+          </div>
+          <div style={{ fontFamily:MONO, fontSize:10, color:C.dim, lineHeight:1.8 }}>
+            Tu celular puede no tener hardware NFC, o el navegador no soporta Web NFC API.
+            Web NFC requiere Chrome para Android 89+ con NFC habilitado.
+          </div>
+          <div style={{ marginTop:12, fontFamily:MONO, fontSize:10, color:C.dim, lineHeight:1.8 }}>
+            <div style={{ color:C.green, fontWeight:700, marginBottom:4 }}>Con NFC podés:</div>
+            • Leer tags NFC de productos, tarjetas, equipos médicos{"\n"}
+            • Escribir tags para vincular módulos SEM automáticamente{"\n"}
+            • Identificar tarjetas de control de acceso{"\n"}
+            • Escanear etiquetas de activos del taller
+          </div>
+        </div>
+      )}
+
+      {hasNFC && (
+        <>
+          <div style={S.row}>
+            {[["read","📖 Leer tag"],["write","✍️ Escribir tag"]].map(([m,l])=>(
+              <button key={m} style={{...S.btn(mode===m?"p":"s",col),flex:1,fontSize:11}}
+                onClick={()=>{ setMode(m); stopRead(); setErr(null); }}>
+                {l}
+              </button>
+            ))}
+          </div>
+
+          {mode==="read" && (
+            <>
+              <div style={{ ...S.disp(reading?col:C.dim), textAlign:"center", padding:"24px 16px",
+                            transition:"all .3s" }}>
+                <ToolIcon id="nfc" size={48} color={reading?col:C.dim} strokeWidth={1.2}
+                  style={{margin:"0 auto 12px",display:"block",
+                    filter:reading?`drop-shadow(0 0 12px ${col})`:"none"}}/>
+                <div style={{ fontFamily:MONO, fontSize:12, color:reading?col:C.dim, fontWeight:700 }}>
+                  {reading?"Acercá el tag NFC al celular…":"NFC listo para leer"}
+                </div>
+                {reading && (
+                  <div style={{ fontFamily:MONO, fontSize:10, color:C.dim, marginTop:8 }}>
+                    Mantené el celular quieto sobre el tag
+                  </div>
+                )}
+              </div>
+
+              {!reading
+                ? <button style={S.btn("p",col)} onClick={startRead}>Activar lector NFC</button>
+                : <button style={S.btn("r")} onClick={stopRead}>Detener</button>
+              }
+
+              {records.length>0 && (
+                <div style={S.res(col)}>
+                  <div style={{fontFamily:MONO,fontSize:9,color:col,fontWeight:700,marginBottom:10}}>
+                    DATOS LEÍDOS
+                  </div>
+                  {records.map((r,i)=>(
+                    <div key={i} style={{padding:"10px 0",
+                      borderBottom:i<records.length-1?`1px solid ${C.bord}`:"none"}}>
+                      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}>
+                        <span style={S.pill(col)}>{r.type}</span>
+                        {r.mediaType&&<span style={S.pill(C.dim)}>{r.mediaType}</span>}
+                      </div>
+                      <div style={{fontFamily:MONO,fontSize:12,color:C.text,wordBreak:"break-all",
+                        lineHeight:1.6}}>{r.value}</div>
+                      {isURL(r.value)&&(
+                        <a href={r.value} target="_blank" rel="noreferrer"
+                          style={{fontFamily:MONO,fontSize:10,color:C.blue}}>🌐 Abrir URL</a>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {history.length>0&&(
+                <div style={S.res(C.dim)}>
+                  <div style={{fontFamily:MONO,fontSize:9,color:C.dim,fontWeight:700,marginBottom:8}}>
+                    HISTORIAL ({history.length} tags)
+                  </div>
+                  {history.map((h,i)=>(
+                    <div key={i} style={{padding:"7px 0",
+                      borderBottom:i<history.length-1?`1px solid ${C.bord}`:"none"}}>
+                      <div style={{display:"flex",justifyContent:"space-between"}}>
+                        <span style={{fontFamily:MONO,fontSize:10,color:C.text,fontWeight:700}}>
+                          UID: {h.serialNumber||"desconocido"}
+                        </span>
+                        <span style={{fontFamily:MONO,fontSize:9,color:C.dim}}>{h.ts}</span>
+                      </div>
+                      <div style={{fontFamily:MONO,fontSize:9,color:C.dim}}>
+                        {h.records.map(r=>r.value).join(" · ").slice(0,60)}
+                      </div>
+                    </div>
+                  ))}
+                  <button style={{...S.btn("s"),marginTop:8,fontSize:10}}
+                    onClick={()=>setHistory([])}>Borrar historial</button>
+                </div>
+              )}
+            </>
+          )}
+
+          {mode==="write" && (
+            <>
+              <div style={S.note}>
+                Escribí texto o URL. Si empieza con "http" se guarda como URL (link directo al abrir el tag).
+                Ideal para vincular un tag NFC a la ficha del módulo SEM.
+              </div>
+              <textarea style={{...S.inp,minHeight:80,resize:"vertical",lineHeight:1.6}}
+                placeholder='Texto libre, URL (https://...), número de serie, etc.'
+                value={writeText} onChange={e=>setWriteText(e.target.value)}/>
+              <button style={{...S.btn("p",col),opacity:writing||!writeText.trim()?.7:1}}
+                onClick={writing||!writeText.trim()?null:writeTag}>
+                {writing?"Acercá el tag NFC…":"✍️ Escribir en tag NFC"}
+              </button>
+              <div style={{ fontFamily:MONO,fontSize:10,color:C.dim,lineHeight:1.7,
+                            background:`rgba(${rgb(C.amber)},0.06)`,borderRadius:8,padding:"8px 12px",
+                            border:`1px solid rgba(${rgb(C.amber)},0.2)` }}>
+                ⚠ Solo tags NFC NDEF regrabables (NTAG213, NTAG215, NTAG216).
+                Tags de tarjetas de crédito/débito NO son regrabables.
+              </div>
+            </>
+          )}
+        </>
+      )}
+
+      {err && <div style={{color:C.amber,fontFamily:MONO,fontSize:10,lineHeight:1.6,
+                background:`rgba(${rgb(C.amber)},0.08)`,borderRadius:8,padding:"8px 12px"}}>{err}</div>}
+
+      <div style={S.note}>
+        NFC funciona en Chrome Android 89+. Para escribir: tags NTAG213 (~$0.50 c/u).
+        Perfectos para etiquetar cada módulo SEM y vincularlos automáticamente a la app.
+      </div>
+    </div>
+  );
+}
 
 // ── Router de herramientas ────────────────────────────────────────────────────
 function getView(tool) {
