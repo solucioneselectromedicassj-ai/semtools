@@ -97,6 +97,7 @@ const TOOL = {
   ble:          { icon:"🔷", label:"Scanner BLE",      sub:"Bluetooth Low Energy · módulos SEM",    col:C.violet },
   ipinfo:       { icon:"🌐", label:"IP / ISP",         sub:"IP pública · proveedor · ubicación",    col:C.green  },
   modulos:      { icon:"📦", label:"Módulos",         sub:"Hardware externo · Catálogo y precios", col:C.green  },
+  nfc:          { icon:"nfc", label:"NFC",              sub:"Leer · escribir tags · vincular módulos", col:C.green  },
 };
 
 const BLOCKS = [
