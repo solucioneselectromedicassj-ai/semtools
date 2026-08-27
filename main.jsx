@@ -835,6 +835,67 @@ function ToolDistancia() {
 }
 
 
+
+// ── Materiales Jack y PDF ────────────────────────────────────────────────────
+const JACK_MATERIALS = [
+  { name:"ThermoJack", items:["NTC 10kΩ B=3950","R 10kΩ ±1%","Cap 100nF cerámico","Jack TRRS 3.5mm macho","Cable apantallado 50cm"] },
+  { name:"AirJack",    items:["Transistor BD139 (sin disipador)","R 1kΩ (base)","R 47Ω/1W (emisor)","R 2.2kΩ (colector)","Cap 10µF/16V","Jack TRRS macho","Tubo PVC Ø10mm x 5cm"] },
+  { name:"VoltJack",   items:["R 27kΩ ±1%","R 1kΩ ±1%","Zener 3.3V/0.5W","Cap 100nF","Jack TRRS macho","Cables con punta de prueba"] },
+  { name:"PhotoJack",  items:["LDR GL5528","R 10kΩ","Cap 100nF","Jack TRRS macho"] },
+];
+
+function JackManualPanel() {
+  const col = C.orange;
+  const [open, setOpen] = React.useState(false);
+  return (
+    <div style={{ ...glass(col,0.06), borderRadius:12, border:`1px solid rgba(${rgb(col)},0.25)`,
+                  overflow:"hidden", marginBottom:8 }}>
+      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between",
+                    padding:"12px 16px", cursor:"pointer" }} onClick={()=>setOpen(o=>!o)}>
+        <div>
+          <div style={{ fontFamily:MONO, fontSize:11, fontWeight:700, color:col }}>
+            🎁 Manual de construcción + Lista de materiales
+          </div>
+          <div style={{ fontFamily:MONO, fontSize:9, color:C.dim, marginTop:2 }}>
+            Gratis · ThermoJack · AirJack · VoltJack · PhotoJack
+          </div>
+        </div>
+        <span style={{ color:col, fontSize:16 }}>{open?"▲":"▼"}</span>
+      </div>
+
+      {open && (
+        <div style={{ padding:"0 16px 16px", borderTop:`1px solid rgba(${rgb(col)},0.15)` }}>
+          {/* Descarga PDF */}
+          <a href="/manual_jack.pdf" download="SEM_Tools_Manual_Sensores_Jack.pdf" target="_blank"
+            style={{ display:"block", textDecoration:"none", marginTop:12, marginBottom:14,
+                     ...S.btn("p",col), textAlign:"center" }}>
+            ⬇ Descargar manual completo (PDF)
+          </a>
+
+          {/* Lista de materiales por módulo */}
+          {JACK_MATERIALS.map(m => (
+            <div key={m.name} style={{ marginBottom:12 }}>
+              <div style={{ fontFamily:MONO, fontSize:10, fontWeight:700, color:col, marginBottom:6 }}>
+                {m.name}
+              </div>
+              {m.items.map((item,i) => (
+                <div key={i} style={{ fontFamily:MONO, fontSize:10, color:C.dim, lineHeight:1.8 }}>
+                  <span style={{ color:col }}>▸ </span>{item}
+                </div>
+              ))}
+            </div>
+          ))}
+
+          <div style={{ fontFamily:MONO, fontSize:9, color:C.dim, marginTop:8, lineHeight:1.7,
+                        background:"rgba(255,255,255,0.03)", borderRadius:6, padding:"8px 10px" }}>
+            Herramientas necesarias: cautín · estaño · multímetro · termoencogible · pinzas
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Sensores Jack — herramientas individuales ────────────────────────────────
 const JACK_MODS = {
   jack_thermo:  { label:"Temperatura",   unit:"°C",  icon:"🌡",  col:"#FF3355", convert:v=>v*100-40,           stereo:false },
