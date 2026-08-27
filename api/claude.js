@@ -23,7 +23,9 @@ async function callGemini(ver, model, parts, key) {
       generationConfig: { maxOutputTokens: 1000, temperature: 0.3 },
     }),
   });
-  const d = await r.json();
+  let d;
+  try { d = await r.json(); }
+  catch(_e) { d = { error: { message: `Respuesta no-JSON del modelo ${model}` } }; }
   return { ok: r.ok, status: r.status, data: d };
 }
 
