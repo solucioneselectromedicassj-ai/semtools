@@ -2647,9 +2647,8 @@ function ToolSistema() {
           Re-ejecuta el test de sensores para actualizar la compatibilidad de herramientas.
         </div>
         <button style={{...S.btn("p",C.cyan)}} onClick={()=>{
-          try{localStorage.removeItem("sem_caps");}catch(_e){}
-          // Ir al onboarding (saltará directo al paso 2 ya que hay key)
-          window.location.reload();
+          if(window.__semRediagnose) window.__semRediagnose();
+          else { try{localStorage.removeItem("sem_caps");}catch(_e){} window.location.reload(); }
         }}>
           🔬 Re-ejecutar test de sensores
         </button>
@@ -3961,6 +3960,16 @@ function App() {
   });
   const t=tool?TOOL[tool]:null;
   const col=t?.col||C.amber;
+
+  // Exponer función de rediagnóstico globalmente (accesible desde ToolSistema)
+  useEffect(()=>{
+    window.__semRediagnose = () => {
+      try{ localStorage.removeItem("sem_caps"); }catch(_e){}
+      setCaps(null);
+      setShowOnboard(true);
+    };
+    return ()=>{ delete window.__semRediagnose; };
+  },[]);
 
   // Modo solar: inyectar estilos globales
   useEffect(()=>{
