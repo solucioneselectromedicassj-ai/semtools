@@ -41,6 +41,7 @@ const SVG_PATHS = {
   ipinfo:       ["M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z","M12 13a3 3 0 1 0 0-6 3 3 0 0 0 0 6z"],
   modulos:      ["M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z","M3.27 6.96L12 12l8.73-5.05","M12 22.08V12"],
   tacometro:    ["M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20z","M12 12l4-4"],
+  nfc:          ["M3 7V5a2 2 0 0 1 2-2h2","M17 3h2a2 2 0 0 1 2 2v2","M21 17v2a2 2 0 0 1-2 2h-2","M7 21H5a2 2 0 0 1-2-2v-2","M12 12m-2 0a2 2 0 1 0 4 0 2 2 0 0 0-4 0","M8 8a6 6 0 0 0 0 8","M16 8a6 6 0 0 1 0 8"],
   celular:      ["M17 2H7a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2z","M12 18h.01"],
   camara:       ["M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z","M12 17a4 4 0 1 0 0-8 4 4 0 0 0 0 8z"],
   jack:         ["M12 2v8","M8 6H4","M20 6h-4","M12 10a4 4 0 1 0 0 8 4 4 0 0 0 0-8z","M12 18v4"],
@@ -99,7 +100,7 @@ const TOOL = {
 };
 
 const BLOCKS = [
-  { id:"celular",  icon:"📱", label:"CELULAR",     col:C.cyan,   tools:["decibeles","nivel","brujula","oscilo","sistema","qr","ir"] },
+  { id:"celular",  icon:"📱", label:"CELULAR",     col:C.cyan,   tools:["decibeles","nivel","brujula","oscilo","sistema","qr","ir","nfc"] },
   { id:"camara",   icon:"📷", label:"CÁMARA + IA", col:C.violet, tools:["resistencias","integrados","distancia","endoscopio"] },
   { id:"jack",     icon:"🔌", label:"JACK 3.5mm",  col:C.orange, tools:["jack_thermo","jack_thermo2","jack_air","jack_volt","jack_light","jack_raw"] },
   { id:"celularplus", icon:"📶", label:"CONECTIVIDAD", col:C.blue, tools:["red","ping","lan","http","ble","ipinfo"] },
@@ -3570,6 +3571,7 @@ const TOOL_NEEDS = {
   nivel:        { needs:["accelerometer"],           label:"Nivel"              },
   brujula:      { needs:["magnetometer"],            label:"Brújula"            },
   oscilo:       { needs:["microphone"],              label:"Osciloscopio"       },
+  nfc:          { needs:["nfc"],                     label:"NFC"                },
   sistema:      { needs:[],                          label:"Sistema"            },
   qr:           { needs:["camera"],                  label:"QR / Código Barras" },
   ir:           { needs:["camera"],                  label:"Control Remoto IR"  },
@@ -3931,6 +3933,7 @@ function getView(tool) {
     case "ipinfo":   return <ToolIPInfo key={tool}/>;
     case "sistema":       return <ToolSistema key={tool}/>;
     case "qr":            return <ToolQR key={tool}/>;
+    case "nfc":           return <ToolNFC key={tool}/>;
     case "ir":            return <ToolIR key={tool}/>;
     case "endoscopio":    return <ToolEndoscopio key={tool}/>;
     case "modulos":       return <ToolModulos key={tool}/>;
