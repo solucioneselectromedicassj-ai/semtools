@@ -2722,58 +2722,66 @@ function ToolSistema() {
 // ── Marketplace de Módulos ─────────────────────────────────────────────────────
 const MODULE_CATALOG = [
   {
-    id:"tacolasr", icon:"⚙️", name:"Tacómetro Láser",
+    id:"tacolasr", icon:"⚙️", name:"SEM TacoLaser",
     col:C.green, status:"dev",
-    desc:"Mide RPM sin contacto y sin efecto estroboscópico. Láser 650nm + fotodiodo + cinta reflectante. Rango: 30 – 60.000 RPM.",
-    iface:"Jack 3.5mm + USB-C alimentación",
-    price:"ARS 12.000 aprox.",
-    specs:["Rango: 30–60.000 RPM","Precisión ±0.1%","Alimentación: USB-C 5V","Señal: jack 3.5mm","Incluye: cinta reflectante + soporte magnético"],
+    desc:"Medí RPM sin contacto, sin tocar la pieza giratoria y sin efecto estroboscópico. Láser 650nm + fotodiodo. Desde un ventilador hasta un motor industrial.",
+    iface:"Jack 3.5mm + USB-C",
+    price:"",
+    specs:["Rango: 30 – 60.000 RPM","Precisión ±0.1%","USB-C para alimentación","Jack 3.5mm para señal","Incluye cinta reflectante"],
   },
   {
-    id:"oscilo2", icon:"〜", name:"Osciloscopio 500kHz",
-    col:C.cyan, status:"design",
-    desc:"Osciloscopio real de 2 canales hasta 500kHz. STM32 + ADC 12-bit + Bluetooth BLE. 25× mejor que audio.",
+    id:"oscilo2", icon:"〜", name:"SEM Scope 500K",
+    col:C.cyan, status:"dev",
+    desc:"Un osciloscopio de 2 canales que cabe en el bolsillo. 500kHz de ancho de banda, ADC 12-bit, conexión Bluetooth. Lo que antes requería un equipo de laboratorio.",
     iface:"Bluetooth BLE",
-    price:"ARS 28.000 aprox.",
-    specs:["2 canales simultáneos","BW: DC–500 kHz","ADC: 12-bit","Muestra: 2 Msps","Trigger: automático / manual","Batería interna 8h"],
+    price:"",
+    specs:["2 canales simultáneos","BW: DC–500 kHz","ADC 12-bit · 2 Msps","Trigger automático / manual","Batería interna 8 horas"],
   },
   {
-    id:"comptest", icon:"◻", name:"Tester de Componentes",
-    col:C.violet, status:"design",
-    desc:"Identifica y mide resistencias, capacitores, inductores, transistores, MOSFETs, diodos, LEDs y cristales. Sin tocar ningún menú.",
+    id:"comptest", icon:"◻", name:"SEM ComponentID",
+    col:C.violet, status:"dev",
+    desc:"Acercás el componente, el módulo lo identifica y te da su valor. Resistencias, capacitores, inductores, transistores, MOSFETs, diodos — sin buscar nada.",
     iface:"Bluetooth BLE",
-    price:"ARS 18.000 aprox.",
-    specs:["Autodetección de tipo","R: 0.1Ω – 50MΩ","C: 1pF – 100mF","L: 1µH – 1H","ESR de electrolíticos","hFE de transistores NPN/PNP"],
+    price:"",
+    specs:["Autodetección de tipo","R: 0.1Ω – 50MΩ","C: 1pF – 100mF","ESR de electrolíticos","hFE de transistores NPN/PNP"],
   },
   {
-    id:"termo2", icon:"🌡🌡", name:"Sondas Dual Temperatura",
+    id:"irmodule", icon:"📡", name:"SEM IR-TX Universal",
+    col:C.violet, status:"dev",
+    desc:"Convertí tu celular en un control remoto universal. TV, aires acondicionados, equipos médicos — cualquier dispositivo infrarrojo. Aprende códigos desconocidos.",
+    iface:"USB-C OTG",
+    price:"",
+    specs:["LED IR 940nm de alta potencia","Base de datos LIRC + Pronto","Control por marca y modelo","Aprende códigos nuevos","Alcance: hasta 10 metros"],
+  },
+  {
+    id:"termocam", icon:"🌡", name:"SEM ThermoVision",
+    col:C.orange, status:"dev",
+    desc:"Ves el calor. Sensor infrarrojo superpuesto en tiempo real sobre la cámara — encontrás fugas térmicas, puntos calientes en circuitos, motores recalentados.",
+    iface:"Bluetooth BLE",
+    price:"",
+    specs:["Sensor MLX90640 · 32×24px","Rango: -40°C a +300°C","Precisión: ±1.5°C","Overlay sobre cámara HD","Paleta configurable (iron, rainbow)"],
+  },
+  {
+    id:"redcable", icon:"🔗", name:"SEM CablePro",
+    col:C.blue, status:"dev",
+    desc:"Diagnóstico completo de redes. UTP, coaxial, fibra óptica — detecta el par roto, el cortocircuito y hasta dónde está la falla. Sin estar en ambos extremos.",
+    iface:"Bluetooth BLE",
+    price:"",
+    specs:["UTP Cat5/6/7 · Coaxial 50/75Ω","Localización de falla por TDR","Detecta par roto/invertido","2 cabezales incluidos"],
+  },
+  {
+    id:"termo2", icon:"🌡🌡", name:"SEM DualTemp",
     col:C.red, status:"available",
-    desc:"Dos sondas NTC calibradas en un solo conector TRRS. Mide dos puntos simultáneamente y calcula diferencial.",
-    iface:"Jack 3.5mm (estéreo)",
-    price:"ARS 4.500 aprox.",
-    specs:["2 sondas NTC calibradas","Rango: -40°C a +125°C","Precisión: ±0.5°C","Longitud: 1m c/u","Conector TRRS integrado"],
-  },
-  {
-    id:"termocam", icon:"🌡", name:"Cámara Termográfica",
-    col:C.orange, status:"design",
-    desc:"Sensor IR MLX90640 (32×24px) superpuesto en tiempo real sobre la cámara del celular. Detecta puntos calientes en equipos electrónicos, motores y transformadores.",
-    iface:"Bluetooth BLE",
-    price:"ARS 45.000 aprox.",
-    specs:["Sensor: MLX90640","Resolución: 32×24 pixels","Rango: -40°C a +300°C","Precisión: ±1.5°C","Superposición sobre cámara HD","Paleta de colores configurable"],
-  },
-  {
-    id:"redcable", icon:"🔗", name:"Tester de Red / Cable UTP",
-    col:C.blue, status:"design",
-    desc:"Prueba continuidad de cables UTP, coaxial y fibra óptica. Reporta par defectuoso, cortocircuito y longitud aproximada via Bluetooth.",
-    iface:"Bluetooth BLE",
-    price:"ARS 15.000 aprox.",
-    specs:["UTP Cat5/6/7","Coaxial 50Ω/75Ω","Mide longitud por TDR","Detecta par roto/invertido","2 cabezales incluidos"],
+    desc:"Dos sondas de temperatura en un solo conector. Medís dos puntos simultáneamente y ves el diferencial en tiempo real. Listo para usar.",
+    iface:"Jack 3.5mm estéreo",
+    price:"",
+    specs:["2 sondas NTC calibradas","Rango: -40°C a +125°C","Precisión: ±0.5°C","Cable 1m c/u · Conector TRRS"],
   },
 ];
 
 const STATUS_LABEL = {
   available: { label:"Disponible", col:C.green },
-  dev:       { label:"En desarrollo", col:C.amber },
+  dev:       { label:"Próximamente",  col:C.amber },
   design:    { label:"En diseño", col:C.violet },
 };
 
@@ -3528,25 +3536,13 @@ function ToolIR() {
         )}
       </div>
 
-      {/* Módulo externo para control */}
-      <div style={{...glass(C.green,0.06),borderRadius:12,padding:"14px 16px",
+      <div style={{...glass(C.green,0.06),borderRadius:10,padding:"12px 14px",
         border:`1px solid rgba(${rgb(C.green)},0.2)`}}>
-        <div style={{fontFamily:MONO,fontSize:9,color:C.green,fontWeight:700,marginBottom:8,letterSpacing:2}}>
-          MÓDULO IR TX — EMISIÓN DE SEÑALES
+        <div style={{fontFamily:MONO,fontSize:10,color:C.green,fontWeight:700,marginBottom:4}}>
+          ¿Querés emitir señales IR?
         </div>
-        <div style={{fontFamily:MONO,fontSize:10,color:C.dim,lineHeight:1.8,marginBottom:10}}>
-          Para controlar dispositivos (TV, aires, equipos) se necesita un LED IR emisor.
-          El módulo SEM IR-TX conecta por USB-C y permite enviar cualquier código IR de las bases de datos de Pronto/LIRC.
-        </div>
-        <div style={{display:"flex",flexDirection:"column",gap:6}}>
-          {["LED IR 940nm + driver","Base de datos LIRC + Pronto","Control por marca/modelo","Aprendizaje de códigos desconocidos","Interfaz USB-C OTG"].map((f,i)=>(
-            <div key={i} style={{fontFamily:MONO,fontSize:10,color:C.dim}}>
-              <span style={{color:C.green}}>▸ </span>{f}
-            </div>
-          ))}
-        </div>
-        <div style={{...S.pill(C.amber),marginTop:12,textAlign:"center",fontSize:10,padding:"6px 14px"}}>
-          En desarrollo · Precio estimado ARS 8.000
+        <div style={{fontFamily:MONO,fontSize:10,color:C.dim,lineHeight:1.7}}>
+          El módulo SEM IR-TX (disponible en MÓDULOS) convierte este celular en un control remoto universal para TV, aires, equipos médicos y más.
         </div>
       </div>
 
