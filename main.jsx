@@ -181,20 +181,24 @@ function getUserKey() { try { return localStorage.getItem("sem_gemini_key")||"";
 async function askClaude(b64, prompt) {
   const key = getUserKey();
   if (!key) throw new Error("NO_KEY");
-  const r = await fetch("/api/claude", {
-    method:"POST",
-    headers:{"Content-Type":"application/json", "x-user-key": key},
-    body:JSON.stringify({ model:"gemini-1.5-flash", max_tokens:1000,
-      messages:[{ role:"user", content:[
-        { type:"image", source:{ type:"base64", media_type:"image/jpeg", data:b64 } },
-        { type:"text", text:prompt }
-      ]}]
-    })
-  });
-  const d = await r.json();
+  let r, d;
+  try {
+    r = await fetch("/api/claude", {
+      method:"POST",
+      headers:{"Content-Type":"application/json", "x-user-key": key},
+      body:JSON.stringify({ model:"gemini-2.0-flash", max_tokens:1000,
+        messages:[{ role:"user", content:[
+          { type:"image", source:{ type:"base64", media_type:"image/jpeg", data:b64 } },
+          { type:"text", text:prompt }
+        ]}]
+      })
+    });
+  } catch(_e) { throw new Error("Sin conexión con el servidor de IA"); }
+  try { d = await r.json(); }
+  catch(_e) { throw new Error("Error del servidor — intentá de nuevo"); }
   if (d.error) {
-    if (d.error.message==="NO_KEY"||d.error.message==="INVALID_KEY")
-      throw new Error(d.error.message);
+    if (d.error.message==="NO_KEY") throw new Error("NO_KEY");
+    if (d.error.message==="INVALID_KEY") throw new Error("INVALID_KEY");
     throw new Error(d.error.message);
   }
   return d.content?.[0]?.text || "Sin respuesta";
@@ -206,7 +210,10 @@ function CameraView({ captureLabel="📷 Capturar", onCapture }) {
   const [on,setOn]=useState(false), [err,setErr]=useState(null);
   const [torch,setTorch]=useState(false), [torchOk,setTorchOk]=useState(false);
 
-  const stop=useCallback(()=>{
+  const stop=useCallback(async()=>{
+    if(tkRef.current){
+      try{ await tkRef.current.applyConstraints({advanced:[{torch:false}]}); }catch(_e){}
+    }
     vRef.current?.srcObject?.getTracks().forEach(t=>t.stop());
     if(vRef.current) vRef.current.srcObject=null;
     tkRef.current=null; setOn(false); setTorch(false);
