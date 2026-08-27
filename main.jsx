@@ -282,6 +282,55 @@ function CameraView({ captureLabel="📷 Capturar", onCapture }) {
 
 
 // ── Device Compatibility Check ────────────────────────────────────────────────
+
+// ── Test de hardware — con timeouts para no bloquear ─────────────────────────
+async function runSensorDetection() {
+  const brandInfo = detectBrand();
+  const caps = {
+    camera: false, microphone: false,
+    accelerometer: false, gyroscope: false, magnetometer: false,
+    ai: false, nfc: "NDEFReader" in window,
+    jack: brandInfo.hasJackGuess, brand: brandInfo,
+  };
+
+  // getUserMedia con timeout de 3s — no bloquea si hay diálogo pendiente
+  const tryMedia = (c) => Promise.race([
+    navigator.mediaDevices.getUserMedia(c),
+    new Promise((_,rej)=>setTimeout(()=>rej(new Error("timeout")),3000))
+  ]);
+
+  try { const s=await tryMedia({video:true});  caps.camera=true;     s.getTracks().forEach(t=>t.stop()); } catch(_e){}
+  try { const s=await tryMedia({audio:true});  caps.microphone=true; s.getTracks().forEach(t=>t.stop()); } catch(_e){}
+
+  // Sensores de movimiento — escuchar 3s
+  await new Promise(resolve=>{
+    const alphas=[];
+    const mH=e=>{
+      const ag=e.accelerationIncludingGravity;
+      if(ag&&ag.x!==null) caps.accelerometer=true;
+      if(e.rotationRate?.alpha!==null) caps.gyroscope=true;
+    };
+    const oH=e=>{ if(e.alpha!=null) alphas.push(e.alpha); };
+    const aH=e=>{ if(e.alpha!=null&&e.absolute) alphas.push(e.alpha+1000); };
+    window.addEventListener("devicemotion",mH,true);
+    window.addEventListener("deviceorientation",oH,true);
+    window.addEventListener("deviceorientationabsolute",aH,true);
+    setTimeout(()=>{
+      window.removeEventListener("devicemotion",mH,true);
+      window.removeEventListener("deviceorientation",oH,true);
+      window.removeEventListener("deviceorientationabsolute",aH,true);
+      const hasAbs=alphas.some(a=>a>999);
+      const vals=alphas.map(a=>a>999?a-1000:a);
+      const range=vals.length>1?Math.max(...vals)-Math.min(...vals):0;
+      caps.magnetometer=vals.length>0&&(hasAbs||range>0.5);
+      resolve();
+    },3000);
+  });
+
+  try{ const k=localStorage.getItem("sem_gemini_key"); caps.ai=!!k&&k!=="SKIP"; }catch(_e){}
+  return caps;
+}
+
 function Onboarding({ onDone }) {
   const [step,    setStep]    = useState(()=>{
     try{ return localStorage.getItem("sem_gemini_key") ? 2 : 1; }
