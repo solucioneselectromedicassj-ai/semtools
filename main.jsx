@@ -395,7 +395,7 @@ function Onboarding({ onDone }) {
     accelerometer:{ label:"Acelerómetro"    },
     gyroscope:    { label:"Giroscopio"      },
     magnetometer: { label:"Magnetómetro"    },
-    nfc:          { label:"NFC"             },
+    nfc:          { label:"NFC (verificar en herramienta)" },
     ai:           { label:"IA (Gemini)"     },
   };
 
@@ -3741,7 +3741,14 @@ function ToolNFC() {
       });
       reader.addEventListener("readingerror", () => setErr("Tag NFC no legible"));
     } catch(e) {
-      setErr("Error NFC: " + e.message);
+      const msg = e.message || "";
+      if(msg.includes("not supported") || msg.includes("NotSupportedError")) {
+        setErr("Este dispositivo no tiene hardware NFC o está desactivado en el sistema.");
+        // Actualizar caps para que no vuelva a mostrarse como disponible
+        try{ const c=JSON.parse(localStorage.getItem("sem_caps")||"{}"); c.nfc=false; localStorage.setItem("sem_caps",JSON.stringify(c)); }catch(_e){}
+      } else {
+        setErr("Error NFC: " + msg);
+      }
       setReading(false);
     }
   };
