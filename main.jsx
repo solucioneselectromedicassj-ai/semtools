@@ -103,7 +103,7 @@ const TOOL = {
 const BLOCKS = [
   { id:"celular",  icon:"📱", label:"CELULAR",     col:C.cyan,   tools:["decibeles","nivel","brujula","oscilo","vibro","espectro","generador","sistema","qr","ir","nfc"] },
   { id:"camara",   icon:"📷", label:"CÁMARA + IA", col:C.violet, tools:["resistencias","integrados","distancia","endoscopio","ppg"] },
-  { id:"jack",     icon:"🔌", label:"JACK 3.5mm",  col:C.orange, tools:["jack_thermo","jack_thermo2","jack_air","jack_volt","jack_light","jack_raw"] },
+  { id:"jack",     icon:"🔌", label:"JACK 3.5mm",  col:C.orange, tools:["jack_thermo","jack_thermo2","jack_air","jack_volt","jack_light","jack_raw","spo2","ecg"] },
   { id:"celularplus", icon:"📶", label:"CONECTIVIDAD", col:C.blue, tools:["red","ping","lan","http","ble","ipinfo"] },
   { id:"modulos",  icon:"📡", label:"MÓDULOS",     col:C.green,  tools:["modulos"] },
 ];
@@ -4237,6 +4237,276 @@ function ToolQR() {
           <div style={S.note}>El QR se genera al instante. Podés guardarlo como imagen.</div>
         </>
       )}
+    </div>
+  );
+}
+
+
+// ── SpO2 por Jack Estéreo ─────────────────────────────────────────────────────
+function ToolSpO2() {
+  const col = C.red;
+  const [on,setOn]=useState(false),[err,setErr]=useState(null);
+  const [spo2,setSpo2]=useState(null),[bpm,setBpm]=useState(null);
+  const [phase,setPhase]=useState("idle"); // idle|measuring|ready
+  const [progress,setProgress]=useState(0);
+  const [sigR,setSigR]=useState([]),[sigIR,setSigIR]=useState([]);
+  const stRef=useRef(),rafRef=useRef(),anlLRef=useRef(),anlRRef=useRef();
+
+  const start=async()=>{
+    try{
+      const s=await navigator.mediaDevices.getUserMedia({
+        audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:false,channelCount:2}
+      });
+      stRef.current=s;
+      const actx=new AudioContext(), src2=actx.createMediaStreamSource(s);
+      const splitter=actx.createChannelSplitter(2);
+      src2.connect(splitter);
+      const anlL=actx.createAnalyser(); anlL.fftSize=1024; anlL.smoothingTimeConstant=0;
+      const anlR=actx.createAnalyser(); anlR.fftSize=1024; anlR.smoothingTimeConstant=0;
+      splitter.connect(anlL,0); splitter.connect(anlR,1);
+      anlLRef.current=anlL; anlRRef.current=anlR;
+      setOn(true); setPhase("measuring"); setProgress(0);
+      setSpo2(null); setBpm(null); setSigR([]); setSigIR([]);
+      setErr(null);
+
+      const tdL=new Float32Array(anlL.fftSize), tdR=new Float32Array(anlR.fftSize);
+      const bufR=[], bufIR=[], WINDOW=300; // ~300 muestras ≈ 6 segundos a ~50fps
+      let frame=0;
+
+      const process=()=>{
+        anlL.getFloatTimeDomainData(tdL);
+        anlR.getFloatTimeDomainData(tdR);
+        // RMS de cada canal
+        const rmsL=Math.sqrt(tdL.reduce((a,v)=>a+v*v,0)/tdL.length);
+        const rmsR=Math.sqrt(tdR.reduce((a,v)=>a+v*v,0)/tdR.length);
+        bufR.push(rmsL);  // Canal L = LED rojo (660nm)
+        bufIR.push(rmsR); // Canal R = LED IR (940nm)
+        if(bufR.length>WINDOW){bufR.shift();bufIR.shift();}
+        frame++;
+        setProgress(Math.min(100,Math.round(frame/WINDOW*100)));
+
+        // Mostrar señales en gráfica
+        if(frame%5===0){
+          setSigR([...bufR]); setSigIR([...bufIR]);
+        }
+
+        if(bufR.length===WINDOW){
+          // Calcular AC y DC de cada canal
+          const mean=arr=>arr.reduce((a,b)=>a+b,0)/arr.length;
+          const dcR=mean(bufR), dcIR=mean(bufIR);
+          const acR=Math.sqrt(bufR.reduce((a,v)=>a+(v-dcR)**2,0)/bufR.length);
+          const acIR=Math.sqrt(bufIR.reduce((a,v)=>a+(v-dcIR)**2,0)/bufIR.length);
+
+          // Ratio R = (AC_red/DC_red) / (AC_ir/DC_ir)
+          if(dcR>0.001 && dcIR>0.001 && acR>0.0001){
+            const R=(acR/dcR)/(acIR/dcIR);
+            // Fórmula empírica SpO2: SpO2 ≈ 110 - 25*R
+            const sp=Math.min(100,Math.max(70,Math.round(110-25*R)));
+            setSpo2(sp);
+
+            // BPM desde envolvente del canal rojo
+            const peaks=[];
+            for(let i=2;i<bufR.length-2;i++){
+              if(bufR[i]>bufR[i-1]&&bufR[i]>bufR[i-2]&&
+                 bufR[i]>bufR[i+1]&&bufR[i]>bufR[i+2]&&
+                 bufR[i]>dcR*1.005&&(peaks.length===0||i-peaks[peaks.length-1]>15)){
+                peaks.push(i);
+              }
+            }
+            if(peaks.length>2){
+              const avgInt=peaks.slice(1).map((p,i)=>p-peaks[i]).reduce((a,b)=>a+b)/(peaks.length-1);
+              setBpm(Math.round(60/(avgInt/50)));
+            }
+          }
+          setPhase("ready");
+        }
+        rafRef.current=requestAnimationFrame(process);
+      };
+      rafRef.current=requestAnimationFrame(process);
+    }catch(e){setErr("Error: "+e.message);}
+  };
+
+  const stop=()=>{
+    cancelAnimationFrame(rafRef.current);
+    stRef.current?.getTracks().forEach(t=>t.stop());
+    setOn(false);setPhase("idle");setSpo2(null);setBpm(null);
+    setSigR([]);setSigIR([]);setProgress(0);
+  };
+
+  useEffect(()=>()=>{cancelAnimationFrame(rafRef.current);stRef.current?.getTracks().forEach(t=>t.stop());},[]);
+
+  const spo2Col=spo2?(spo2>=95?C.green:spo2>=90?C.amber:C.red):col;
+
+  return (
+    <div style={S.wrap}>
+      <div style={S.st(col)}>▸ SpO2 — Saturación de Oxígeno</div>
+      {on&&<button style={S.btn("r")} onClick={stop}>⏹ Detener</button>}
+
+      {/* Hardware requerido */}
+      <div style={{...glass(col,0.06),borderRadius:12,padding:"12px 14px",
+        border:`1px solid rgba(${rgb(col)},0.25)`}}>
+        <div style={{fontFamily:MONO,fontSize:9,color:col,fontWeight:700,marginBottom:6,letterSpacing:2}}>
+          MÓDULO SEM SpO2 REQUERIDO
+        </div>
+        {["LED rojo 660nm + LED IR 940nm","2× Fotodiodo BPW34 + amplificador TIA (LM358)",
+          "Conector TRRS estéreo — L=canal rojo · R=canal IR",
+          "Sonda tipo clip para dedo (imprimir en 3D)"].map((item,i)=>(
+          <div key={i} style={{fontFamily:MONO,fontSize:9,color:C.dim,lineHeight:1.8}}>
+            <span style={{color:col}}>▸ </span>{item}
+          </div>
+        ))}
+      </div>
+
+      {/* Displays SpO2 y BPM */}
+      {(spo2||phase==="measuring")&&(
+        <div style={{display:"flex",gap:8}}>
+          <div style={{...S.disp(spo2Col),flex:2,textAlign:"center",padding:"20px 8px"}}>
+            <div style={{fontFamily:MONO,fontSize:9,color:C.dim}}>SpO₂</div>
+            <div style={{fontFamily:MONO,fontSize:52,fontWeight:700,color:spo2Col,
+              textShadow:`0 0 24px ${spo2Col}`,lineHeight:1}}>
+              {spo2??"--.--"}
+            </div>
+            <div style={{fontFamily:MONO,fontSize:12,color:C.dim}}>%</div>
+            {spo2&&<div style={{fontFamily:MONO,fontSize:10,color:spo2Col,marginTop:4,fontWeight:700}}>
+              {spo2>=95?"✓ Normal":spo2>=90?"⚠ Bajo":"⚠ Crítico"}
+            </div>}
+          </div>
+          <div style={{...S.disp(C.amber),flex:1,textAlign:"center",padding:"20px 8px"}}>
+            <div style={{fontFamily:MONO,fontSize:9,color:C.dim}}>BPM</div>
+            <div style={{fontFamily:MONO,fontSize:32,fontWeight:700,color:C.amber,
+              textShadow:`0 0 16px ${C.amber}`,lineHeight:1}}>
+              {bpm??"-"}
+            </div>
+            <div style={{fontFamily:MONO,fontSize:10,color:C.dim,marginTop:4}}>pulso</div>
+          </div>
+        </div>
+      )}
+
+      {/* Progreso */}
+      {phase==="measuring"&&!spo2&&(
+        <div>
+          <div style={{display:"flex",justifyContent:"space-between",fontFamily:MONO,fontSize:10,color:C.dim,marginBottom:4}}>
+            <span>Analizando señal…</span><span style={{color:col}}>{progress}%</span>
+          </div>
+          <div style={{height:6,background:`rgba(${rgb(col)},0.15)`,borderRadius:3,overflow:"hidden"}}>
+            <div style={{height:"100%",width:`${progress}%`,background:col,borderRadius:3,transition:"width .2s"}}/>
+          </div>
+        </div>
+      )}
+
+      {/* Gráficas de señal */}
+      {sigR.length>5&&(
+        <div style={{display:"flex",flexDirection:"column",gap:4}}>
+          <div style={{fontFamily:MONO,fontSize:8,color:C.red}}>● Canal L — Rojo 660nm</div>
+          <TimeChart data={sigR} col={C.red} unit="" height={50}/>
+          <div style={{fontFamily:MONO,fontSize:8,color:C.violet}}>● Canal R — IR 940nm</div>
+          <TimeChart data={sigIR} col={C.violet} unit="" height={50}/>
+        </div>
+      )}
+
+      {err&&<div style={{color:C.red,fontFamily:MONO,fontSize:10,lineHeight:1.6}}>{err}</div>}
+      {!on&&<button style={S.btn("p",col)} onClick={start}>Conectar módulo SpO2</button>}
+      <div style={S.note}>
+        ⚠ Orientativo — no reemplaza un oxímetro certificado. Requiere módulo SEM SpO2 con sonda de dedo.
+        SpO2 normal: 95-100% · Bajo: 90-94% · Crítico: &lt;90%.
+      </div>
+    </div>
+  );
+}
+
+// ── ECG básico por Jack ───────────────────────────────────────────────────────
+function ToolECG() {
+  const col = C.green;
+  const [on,setOn]=useState(false),[err,setErr]=useState(null);
+  const [bpm,setBpm]=useState(null),[signal,setSignal]=useState([]);
+  const stRef=useRef(),anlRef=useRef(),rafRef=useRef();
+
+  const start=async()=>{
+    try{
+      const s=await navigator.mediaDevices.getUserMedia({
+        audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:false}
+      });
+      stRef.current=s;
+      const ctx=new AudioContext(), src2=ctx.createMediaStreamSource(s);
+      const anl=ctx.createAnalyser(); anl.fftSize=2048; anl.smoothingTimeConstant=0.1;
+      src2.connect(anl); anlRef.current=anl;
+      setOn(true); setErr(null); setSignal([]); setBpm(null);
+      const td=new Float32Array(anl.fftSize), buf=[];
+      const process=()=>{
+        anl.getFloatTimeDomainData(td);
+        const avg=td.reduce((a,v)=>a+v,0)/td.length;
+        buf.push(avg);
+        if(buf.length>500) buf.shift();
+        setSignal([...buf]);
+        // Detectar picos R (QRS complex)
+        if(buf.length>200){
+          const peaks=[];
+          const mean=buf.reduce((a,b)=>a+b)/buf.length;
+          const std=Math.sqrt(buf.reduce((a,v)=>a+(v-mean)**2)/buf.length);
+          for(let i=5;i<buf.length-5;i++){
+            if(buf[i]>mean+std*2&&
+               buf[i]>buf[i-1]&&buf[i]>buf[i-2]&&
+               buf[i]>buf[i+1]&&buf[i]>buf[i+2]&&
+               (peaks.length===0||i-peaks[peaks.length-1]>30)){
+              peaks.push(i);
+            }
+          }
+          if(peaks.length>2){
+            const avgInt=peaks.slice(1).map((p,i2)=>p-peaks[i2]).reduce((a,b)=>a+b)/(peaks.length-1);
+            setBpm(Math.round(60/(avgInt/50)));
+          }
+        }
+        rafRef.current=requestAnimationFrame(process);
+      };
+      rafRef.current=requestAnimationFrame(process);
+    }catch(e){setErr(e.message);}
+  };
+
+  const stop=()=>{
+    cancelAnimationFrame(rafRef.current);
+    stRef.current?.getTracks().forEach(t=>t.stop());
+    setOn(false);setSignal([]);setBpm(null);
+  };
+
+  useEffect(()=>()=>{cancelAnimationFrame(rafRef.current);stRef.current?.getTracks().forEach(t=>t.stop());},[]);
+
+  return (
+    <div style={S.wrap}>
+      <div style={S.st(col)}>▸ ECG — Electrocardiograma básico</div>
+      {on&&<button style={S.btn("r")} onClick={stop}>⏹ Detener</button>}
+
+      <div style={{...glass(col,0.06),borderRadius:12,padding:"12px 14px",
+        border:`1px solid rgba(${rgb(col)},0.25)`}}>
+        <div style={{fontFamily:MONO,fontSize:9,color:col,fontWeight:700,marginBottom:6,letterSpacing:2}}>
+          MÓDULO SEM ECG REQUERIDO
+        </div>
+        {["Amplificador de instrumentación INA128 o AD8221",
+          "Electrodos de superficie (adhesivos o clips)",
+          "Filtro paso bajo 150Hz + filtro paso alto 0.5Hz",
+          "Conector TRRS — señal diferencial al canal de micrófono"].map((item,i)=>(
+          <div key={i} style={{fontFamily:MONO,fontSize:9,color:C.dim,lineHeight:1.8}}>
+            <span style={{color:col}}>▸ </span>{item}
+          </div>
+        ))}
+      </div>
+
+      {bpm&&(
+        <div style={{...S.disp(col),textAlign:"center",padding:"12px 16px"}}>
+          <div style={{fontFamily:MONO,fontSize:9,color:C.dim}}>FRECUENCIA CARDÍACA</div>
+          <div style={{fontFamily:MONO,fontSize:48,fontWeight:700,color:col,
+            textShadow:`0 0 20px ${col}`,lineHeight:1}}>{bpm}</div>
+          <div style={{fontFamily:MONO,fontSize:12,color:C.dim}}>BPM</div>
+        </div>
+      )}
+
+      {signal.length>5&&<TimeChart data={signal} col={col} unit="" height={100}/>}
+
+      {err&&<div style={{color:C.red,fontFamily:MONO,fontSize:10}}>{err}</div>}
+      {!on&&<button style={S.btn("p",col)} onClick={start}>Conectar módulo ECG</button>}
+      <div style={S.note}>
+        ⚠ Solo para verificación técnica de módulos — no para diagnóstico clínico.
+        Requiere módulo SEM ECG con amplificador INA128 y electrodos de superficie.
+      </div>
     </div>
   );
 }
