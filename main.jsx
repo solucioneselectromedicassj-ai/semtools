@@ -341,11 +341,13 @@ async function runSensorDetection() {
 }
 
 function Onboarding({ onDone }) {
+  // Detectar proveedor actual para pre-seleccionar tab
+  const currentKey = (() => { try{ return localStorage.getItem("sem_gemini_key")||""; }catch(_e){ return ""; } })();
   const [step,    setStep]    = useState(()=>{
     try{ return localStorage.getItem("sem_gemini_key") ? 2 : 1; }
     catch(_e){ return 1; }
   });
-  const [key,     setKey]     = useState("");
+  const [key,     setKey]     = useState(currentKey==="SKIP"?"":currentKey);
   const [testing, setTesting] = useState(false);
   const [err,     setErr]     = useState(null);
   const [caps,    setCaps]    = useState(null);
@@ -4208,9 +4210,12 @@ function App() {
         
         {!showOnboard&&(
           <button style={{border:"none",background:"rgba(255,255,255,0.06)",borderRadius:8,
-            padding:"6px 8px",cursor:"pointer",fontFamily:MONO,fontSize:9,color:C.dim}}
-            onClick={()=>setShowOnboard(true)}>
+            padding:"5px 10px",cursor:"pointer",fontFamily:MONO,fontSize:8,color:C.dim,
+            display:"flex",alignItems:"center",gap:4}}
+            onClick={()=>setShowOnboard(true)}
+            title="Cambiar API key de IA">
             🔑
+            <span style={{fontSize:7,letterSpacing:.5,opacity:.7}}>IA</span>
           </button>
         )}
         <button style={{border:hiContrast?`2px solid ${C.amber}`:"1px solid rgba(255,255,255,0.15)",
