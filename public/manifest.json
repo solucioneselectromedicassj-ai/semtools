@@ -1,9 +1,9 @@
 {
   "name": "SEM Tools",
   "short_name": "SEM Tools",
-  "description": "Herramientas de taller biom\u00e9dico \u2014 Soluciones Electrom\u00e9dicas SJ",
-  "theme_color": "#EEF1F8",
-  "background_color": "#EEF1F8",
+  "description": "Herramientas de taller biomédico — Soluciones Electromédicas SJ",
+  "theme_color": "#0D1829",
+  "background_color": "#0D1829",
   "display": "standalone",
   "orientation": "portrait",
   "start_url": "/",
