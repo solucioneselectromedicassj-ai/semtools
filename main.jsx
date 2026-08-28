@@ -987,6 +987,7 @@ function ToolJackSensor({ modId }) {
   const col = m.col;
   const [on,setOn]=useState(false), [val,setVal]=useState(null), [val2,setVal2]=useState(null);
   const [peak,setPeak]=useState(null), [minV,setMin]=useState(null), [err,setErr]=useState(null);
+  const [trendData,setTrend]=useState([]);
   const anlRef=useRef(null), rafRef=useRef(), stRef=useRef(), canRef=useRef();
 
   const start = async () => {
@@ -1010,6 +1011,7 @@ function ToolJackSensor({ modId }) {
         rms=Math.sqrt(rms/td.length);
         const v = m.convert(rms);
         setVal(v); setPeak(p=>p===null||v>p?v:p); setMin(n=>n===null||v<n?v:n);
+        setTrend(h=>[...h.slice(-59),v]);
         if(m.stereo) {
           anlR.getFloatTimeDomainData(td2);
           let rms2=0; for(let i=0;i<td2.length;i++) rms2+=td2[i]*td2[i];
@@ -1110,10 +1112,14 @@ function ToolJackSensor({ modId }) {
       )}
 
       {err && <div style={{ color:C.amber, fontFamily:MONO, fontSize:10, lineHeight:1.6 }}>{err}</div>}
-      {!on
-        ? <button style={S.btn("p", col)} onClick={start}>Conectar {m.icon} {m.label}</button>
-        : <button style={S.btn("r")} onClick={stop}>Desconectar</button>
+      {/* Botón sticky */}
+      {on
+        ?<button style={{...S.btn("r"),position:"sticky",top:0,zIndex:10}} onClick={stop}>⏹ Desconectar</button>
+        :<button style={S.btn("p",col)} onClick={start}>Conectar {m.icon} {m.label}</button>
       }
+
+      {/* Gráfica temporal */}
+      {trendData.length>2&&<TimeChart data={trendData} col={col} unit={" "+m.unit} height={80}/>}
       {m.stereo && <div style={S.note}>Conectá sonda 1 al canal L y sonda 2 al canal R del jack estéreo TRRS.</div>}
       {!m.stereo && <div style={S.note}>Conectá el sensor al jack 3.5mm. Ver manual para construir {m.label === "Temperatura" ? "ThermoJack" : m.icon+" módulo"}.</div>}
     </div>
@@ -1125,6 +1131,7 @@ function ToolDecibeles() {
   const col=C.cyan;
   const [db,setDb]=useState(null), [peak,setPeak]=useState(null);
   const [on,setOn]=useState(false), [err,setErr]=useState(null);
+  const [history,setHistory]=useState([]); // últimas 60 lecturas para gráfica
   const [events,setEvents]=useState([]); // {db,dur,ts}
   const [thresh,setThresh]=useState(75);
   const anlRef=useRef(),rafRef=useRef(),stRef=useRef();
@@ -1221,8 +1228,14 @@ function ToolDecibeles() {
         </div>
       )}
       {err&&<div style={{color:C.red,fontFamily:MONO,fontSize:11}}>{err}</div>}
-      {on?<button style={S.btn("r")} onClick={stop}>Detener</button>
-         :<button style={S.btn("p",col)} onClick={start}>Activar micrófono</button>}
+      {/* Botón siempre visible arriba del historial */}
+      {on
+        ?<button style={{...S.btn("r"),position:"sticky",top:0,zIndex:10}} onClick={stop}>⏹ Detener</button>
+        :<button style={S.btn("p",col)} onClick={start}>Activar micrófono</button>
+      }
+
+      {/* Gráfica temporal */}
+      {history.length>2&&<TimeChart data={history} col={col} unit=" dB" height={80}/>}
 
       {/* Calibración por silencio */}
       {(()=>{
@@ -2678,6 +2691,46 @@ function detectBrand() {
   return { brand, model, os, osVer, ui, hasJackGuess, tips: TIPS[ui]||TIPS.stock };
 }
 
+
+
+// ── Gráfica temporal reutilizable ────────────────────────────────────────────
+function TimeChart({ data, col, unit="", height=80 }) {
+  const cRef = useRef();
+  useEffect(()=>{
+    const c = cRef.current; if(!c||data.length<2) return;
+    const ctx=c.getContext("2d"), W=c.width, H=c.height;
+    ctx.fillStyle="rgba(0,0,0,0.85)"; ctx.fillRect(0,0,W,H);
+    const valid=data.filter(v=>v!==null&&!isNaN(v));
+    if(valid.length<2) return;
+    const mn=Math.min(...valid), mx=Math.max(...valid), range=mx-mn||1;
+    // Grid
+    ctx.strokeStyle="rgba(255,255,255,0.06)"; ctx.lineWidth=1;
+    [0.25,0.5,0.75].forEach(f=>{
+      ctx.beginPath();ctx.moveTo(0,H*f);ctx.lineTo(W,H*f);ctx.stroke();
+    });
+    // Línea
+    const sw=W/(data.length-1);
+    ctx.strokeStyle=col; ctx.lineWidth=2.5; ctx.lineJoin="round"; ctx.lineCap="round";
+    ctx.beginPath();
+    let started=false;
+    data.forEach((v,i)=>{
+      if(v===null||isNaN(v)) return;
+      const x=i*sw, y=H-4-((v-mn)/range)*(H-10);
+      if(!started){ctx.moveTo(x,y);started=true;}else ctx.lineTo(x,y);
+    });
+    ctx.stroke();
+    // Labels
+    ctx.fillStyle=col; ctx.font="bold 9px monospace";
+    ctx.fillText(mx.toFixed(1)+unit, 4, 11);
+    ctx.fillStyle="rgba(255,255,255,0.4)"; ctx.font="9px monospace";
+    ctx.fillText(mn.toFixed(1)+unit, 4, H-3);
+  }, [data]);
+  return (
+    <canvas ref={cRef} width={640} height={height}
+      style={{width:"100%",borderRadius:8,border:`1px solid rgba(${rgb(col)},0.2)`,
+        background:"rgba(0,0,0,0.7)",display:"block"}}/>
+  );
+}
 
 // ── Sistema de calibración ────────────────────────────────────────────────────
 const CAL_DEFAULTS = {
