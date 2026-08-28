@@ -971,6 +971,7 @@ function ToolJackSensor({ modId }) {
   return (
     <div style={S.wrap}>
       <div style={S.st(col)}>▸ {m.icon} {m.label}</div>
+      <JackManualPanel/>
 
       {/* Display principal */}
       {!m.stereo ? (
