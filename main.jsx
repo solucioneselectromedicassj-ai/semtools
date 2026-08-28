@@ -1263,10 +1263,8 @@ function ToolDecibeles() {
                 {phase==="intro"&&(
                   <>
                     <div style={{fontFamily:MONO,fontSize:10,color:C.dim,lineHeight:1.9,marginBottom:12}}>
-                      <span style={{color:C.amber,fontWeight:700}}>1.</span> Activá el micrófono{"
-"}
-                      <span style={{color:C.amber,fontWeight:700}}>2.</span> Buscá el lugar más silencioso que puedas{"
-"}
+                      <span style={{color:C.amber,fontWeight:700}}>1.</span> Activá el micrófono<br/>
+                      <span style={{color:C.amber,fontWeight:700}}>2.</span> Buscá el lugar más silencioso que puedas<br/>
                       <span style={{color:C.amber,fontWeight:700}}>3.</span> Quedate quieto y apretá el botón
                     </div>
                     <button style={S.btn("p",C.amber)} onClick={measure}>
@@ -1288,8 +1286,7 @@ function ToolDecibeles() {
                 {phase==="choose"&&meas!==null&&(
                   <>
                     <div style={{fontFamily:MONO,fontSize:11,color:C.text,marginBottom:12}}>
-                      Tu micrófono midió <span style={{color:C.amber,fontWeight:700}}>{meas} dB</span> en silencio.{"
-"}
+                      Tu micrófono midió <span style={{color:C.amber,fontWeight:700}}>{meas} dB</span> en silencio.<br/>
                       ¿Cómo describirías ese lugar?
                     </div>
                     <div style={{display:"flex",flexDirection:"column",gap:6}}>
