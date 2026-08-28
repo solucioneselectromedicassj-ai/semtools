@@ -355,6 +355,17 @@ function Onboarding({ onDone }) {
   const testAndSave = async () => {
     const k = key.trim();
     if (k.length < 15) { setErr("Key muy corta — copiá todo el texto"); return; }
+    // Claude key: sk-ant-... → validar directamente contra Anthropic
+    if (k.startsWith("sk-ant-") || k.startsWith("sk-")) {
+      try {
+        const r = await fetch("https://api.anthropic.com/v1/models", {
+          headers:{ "x-api-key":k, "anthropic-version":"2023-06-01" }
+        });
+        if (r.status === 401) throw new Error("Key de Claude inválida");
+        localStorage.setItem("sem_gemini_key", k);
+        setStep(2); setTesting(false); return;
+      } catch(e2) { setErr(e2.message); setTesting(false); return; }
+    }
     setTesting(true); setErr(null);
     try {
       for (const ver of ["v1beta","v1"]) {
@@ -667,12 +678,18 @@ function Onboarding({ onDone }) {
                             border:`1px solid rgba(${rgb(C.orange)},0.2)` }}>
                 <div style={{ fontFamily:MONO, fontSize:9, color:C.orange, fontWeight:700,
                               letterSpacing:2, marginBottom:8 }}>SIN JACK 3.5mm — ALTERNATIVAS</div>
-                {["🔷 Módulos BLE: sensores que se conectan por Bluetooth Low Energy",
-                  "🔌 Adaptador USB-C a 3.5mm: permite usar módulos jack en celulares sin jack",
-                  "📡 Módulos WiFi: basados en ESP32, se comunican por la red local",
-                  "⚡ Módulos USB-C: conexión directa de datos + alimentación 5V"].map((t,i)=>(
+                {[
+                  "🔷 Módulos SEM BLE: sensores que se conectan por Bluetooth — sin jack",
+                  "🔌 Adaptador USB-C → 3.5mm CON DAC (chip interno): necesario para entrada de micrófono. Los adaptadores pasivos baratos NO funcionan para sensores",
+                  "📡 Módulos SEM WiFi: basados en ESP32, se comunican por red local",
+                  "⚡ Módulos USB-C directos: datos + alimentación 5V en un solo conector",
+                ].map((t,i)=>(
                   <div key={i} style={{ fontFamily:MONO, fontSize:10, color:C.dim, lineHeight:1.9 }}>{t}</div>
                 ))}
+                <div style={{ fontFamily:MONO, fontSize:10, color:C.amber, marginTop:8, lineHeight:1.7,
+                              background:`rgba(${rgb(C.amber)},0.08)`, borderRadius:6, padding:"6px 10px" }}>
+                  ⚠ Adaptadores USB-C baratos: solo audio de salida (auriculares). Para sensores jack necesitás un adaptador con chip DAC que soporte entrada de micrófono.
+                </div>
               </div>
             )}
 
