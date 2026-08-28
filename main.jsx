@@ -101,8 +101,8 @@ const TOOL = {
 };
 
 const BLOCKS = [
-  { id:"celular",  icon:"📱", label:"CELULAR",     col:C.cyan,   tools:["decibeles","nivel","brujula","oscilo","sistema","qr","ir","nfc"] },
-  { id:"camara",   icon:"📷", label:"CÁMARA + IA", col:C.violet, tools:["resistencias","integrados","distancia","endoscopio"] },
+  { id:"celular",  icon:"📱", label:"CELULAR",     col:C.cyan,   tools:["decibeles","nivel","brujula","oscilo","vibro","espectro","generador","sistema","qr","ir","nfc"] },
+  { id:"camara",   icon:"📷", label:"CÁMARA + IA", col:C.violet, tools:["resistencias","integrados","distancia","endoscopio","ppg"] },
   { id:"jack",     icon:"🔌", label:"JACK 3.5mm",  col:C.orange, tools:["jack_thermo","jack_thermo2","jack_air","jack_volt","jack_light","jack_raw"] },
   { id:"celularplus", icon:"📶", label:"CONECTIVIDAD", col:C.blue, tools:["red","ping","lan","http","ble","ipinfo"] },
   { id:"modulos",  icon:"📡", label:"MÓDULOS",     col:C.green,  tools:["modulos"] },
@@ -1945,6 +1945,434 @@ function ToolOscilo() {
 }
 
 
+
+
+// ── Generador de tonos ────────────────────────────────────────────────────────
+function ToolGenerador() {
+  const col = C.amber;
+  const [on, setOn] = useState(false);
+  const [freq, setFreq] = useState(1000);
+  const [wave, setWave] = useState("sine");
+  const [vol, setVol] = useState(0.5);
+  const [sweep, setSweep] = useState(false);
+  const ctxRef = useRef(null), oscRef = useRef(null), gainRef = useRef(null), rafRef = useRef();
+
+  const start = () => {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = wave; osc.frequency.value = freq;
+    gain.gain.value = vol;
+    osc.connect(gain); gain.connect(ctx.destination);
+    osc.start();
+    ctxRef.current = ctx; oscRef.current = osc; gainRef.current = gain;
+    setOn(true);
+  };
+
+  const stop = () => {
+    oscRef.current?.stop(); ctxRef.current?.close();
+    ctxRef.current = null; oscRef.current = null;
+    setOn(false); setSweep(false);
+  };
+
+  useEffect(()=>{ if(oscRef.current) oscRef.current.frequency.value = freq; }, [freq]);
+  useEffect(()=>{ if(oscRef.current) oscRef.current.type = wave; }, [wave]);
+  useEffect(()=>{ if(gainRef.current) gainRef.current.gain.value = vol; }, [vol]);
+
+  useEffect(()=>{
+    if(!sweep||!oscRef.current) return;
+    let f = 20;
+    const run = () => {
+      f = f < 20000 ? f * 1.02 : 20;
+      if(oscRef.current) oscRef.current.frequency.value = f;
+      setFreq(Math.round(f));
+      rafRef.current = requestAnimationFrame(run);
+    };
+    rafRef.current = requestAnimationFrame(run);
+    return () => cancelAnimationFrame(rafRef.current);
+  }, [sweep]);
+
+  useEffect(()=>()=>{ oscRef.current?.stop(); ctxRef.current?.close(); }, []);
+
+  const WAVES = [["sine","Seno ∿"],["square","Cuadrada ⊓"],["triangle","Triángulo △"],["sawtooth","Sierra ⋁"]];
+  const PRESETS = [[20,"20Hz"],[50,"50Hz"],[60,"60Hz"],[440,"440Hz"],[1000,"1kHz"],[10000,"10kHz"]];
+
+  return (
+    <div style={S.wrap}>
+      <div style={S.st(col)}>▸ Generador de Tonos</div>
+      {on && <button style={{...S.btn("r"),marginBottom:4}} onClick={stop}>⏹ Detener</button>}
+
+      {/* Frecuencia */}
+      <div style={{...S.disp(col),padding:"20px 16px",textAlign:"center"}}>
+        <div style={{fontFamily:MONO,fontSize:56,fontWeight:700,color:col,
+          textShadow:`0 0 24px ${col}`,lineHeight:1}}>
+          {freq>=1000?(freq/1000).toFixed(freq>=10000?1:2)+"kHz":freq+"Hz"}
+        </div>
+        <div style={S.dlbl}>{wave.toUpperCase()}</div>
+      </div>
+
+      <input type="range" min={20} max={20000} step={1} value={freq}
+        style={{width:"100%",accentColor:col}}
+        onChange={e=>setFreq(+e.target.value)}/>
+      <div style={{display:"flex",justifyContent:"space-between",fontFamily:MONO,fontSize:9,color:C.dim}}>
+        <span>20 Hz</span><span>20 kHz</span>
+      </div>
+
+      {/* Presets */}
+      <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+        {PRESETS.map(([f,l])=>(
+          <button key={f} style={{border:`1px solid ${freq===f?col:C.bord}`,borderRadius:8,
+            padding:"5px 10px",cursor:"pointer",fontFamily:MONO,fontSize:10,
+            color:freq===f?col:C.dim,background:freq===f?`rgba(${rgb(col)},0.12)`:"rgba(255,255,255,0.04)"}}
+            onClick={()=>setFreq(f)}>{l}</button>
+        ))}
+      </div>
+
+      {/* Forma de onda */}
+      <div style={{display:"flex",gap:6}}>
+        {WAVES.map(([w,l])=>(
+          <button key={w} style={{flex:1,border:`1px solid ${wave===w?col:C.bord}`,borderRadius:8,
+            padding:"8px 4px",cursor:"pointer",fontFamily:MONO,fontSize:9,
+            color:wave===w?col:C.dim,background:wave===w?`rgba(${rgb(col)},0.12)`:"rgba(255,255,255,0.04)"}}
+            onClick={()=>setWave(w)}>{l}</button>
+        ))}
+      </div>
+
+      {/* Volumen */}
+      <div style={{display:"flex",alignItems:"center",gap:10}}>
+        <span style={{fontFamily:MONO,fontSize:10,color:C.dim,whiteSpace:"nowrap"}}>Vol {Math.round(vol*100)}%</span>
+        <input type="range" min={0} max={1} step={0.01} value={vol}
+          style={{flex:1,accentColor:col}} onChange={e=>setVol(+e.target.value)}/>
+      </div>
+
+      <div style={S.row}>
+        {!on
+          ?<button style={{...S.btn("p",col),flex:1}} onClick={start}>▶ Generar tono</button>
+          :<button style={{...S.btn(sweep?"r":"s"),flex:1}} onClick={()=>setSweep(s=>!s)}>
+            {sweep?"⏹ Parar sweep":"⟳ Sweep 20Hz→20kHz"}
+          </button>
+        }
+      </div>
+      <div style={S.note}>Útil para probar amplificadores, bocinas, filtros y circuitos de audio. 50/60Hz detecta ruido de red eléctrica.</div>
+    </div>
+  );
+}
+
+// ── Analizador de espectro ────────────────────────────────────────────────────
+function ToolEspectro() {
+  const col = C.violet;
+  const [on, setOn] = useState(false), [err, setErr] = useState(null);
+  const [peak, setPeak] = useState(null);
+  const anlRef = useRef(), stRef = useRef(), cRef = useRef(), rafRef = useRef();
+
+  const start = async () => {
+    try {
+      const s = await navigator.mediaDevices.getUserMedia({
+        audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:false}
+      });
+      stRef.current = s;
+      const ctx = new AudioContext(), src2 = ctx.createMediaStreamSource(s);
+      const anl = ctx.createAnalyser(); anl.fftSize = 4096; anl.smoothingTimeConstant = 0.7;
+      src2.connect(anl); anlRef.current = anl;
+      setOn(true); setErr(null);
+      const buf = new Float32Array(anl.frequencyBinCount);
+      const draw = () => {
+        anl.getFloatFrequencyData(buf);
+        const c = cRef.current; if(!c) return;
+        const ctx2=c.getContext("2d"), W=c.width, H=c.height;
+        ctx2.fillStyle="rgba(0,0,0,0.85)"; ctx2.fillRect(0,0,W,H);
+        // Grid de frecuencias
+        const sampleRate = ctx.sampleRate;
+        ctx2.strokeStyle="rgba(255,255,255,0.06)"; ctx2.lineWidth=1;
+        [100,1000,10000].forEach(f=>{
+          const x = Math.log10(f/20)/Math.log10(sampleRate/2/20)*W;
+          ctx2.beginPath();ctx2.moveTo(x,0);ctx2.lineTo(x,H);ctx2.stroke();
+          ctx2.fillStyle="rgba(255,255,255,0.3)";ctx2.font="8px monospace";
+          ctx2.fillText(f>=1000?f/1000+"kHz":f+"Hz",x+2,H-2);
+        });
+        // Espectro
+        ctx2.beginPath();
+        let maxDb=-Infinity, maxBin=0;
+        for(let i=0;i<buf.length;i++){
+          const freq2=i/buf.length*(sampleRate/2);
+          if(freq2<20) continue;
+          const x=Math.log10(freq2/20)/Math.log10(sampleRate/2/20)*W;
+          const y=H-(buf[i]+120)/80*H;
+          i===0?ctx2.moveTo(x,Math.max(0,y)):ctx2.lineTo(x,Math.max(0,y));
+          if(buf[i]>maxDb){maxDb=buf[i];maxBin=i;}
+        }
+        ctx2.strokeStyle=col; ctx2.lineWidth=2; ctx2.stroke();
+        // Fill bajo la curva
+        ctx2.lineTo(W,H); ctx2.lineTo(0,H); ctx2.closePath();
+        ctx2.fillStyle=`rgba(${rgb(col)},0.08)`; ctx2.fill();
+        // Pico
+        const peakFreq = maxBin/buf.length*(sampleRate/2);
+        if(peakFreq>20) setPeak(Math.round(peakFreq));
+        rafRef.current=requestAnimationFrame(draw);
+      };
+      rafRef.current=requestAnimationFrame(draw);
+    } catch(e){ setErr(e.message); }
+  };
+
+  const stop = () => {
+    cancelAnimationFrame(rafRef.current);
+    stRef.current?.getTracks().forEach(t=>t.stop());
+    setOn(false); setPeak(null);
+  };
+
+  useEffect(()=>()=>{cancelAnimationFrame(rafRef.current);stRef.current?.getTracks().forEach(t=>t.stop());},[]);
+
+  return (
+    <div style={S.wrap}>
+      <div style={S.st(col)}>▸ Analizador de Espectro</div>
+      {on && <button style={S.btn("r")} onClick={stop}>⏹ Detener</button>}
+      {peak&&<div style={{...S.disp(col),textAlign:"center",padding:"8px 16px"}}>
+        <div style={{fontFamily:MONO,fontSize:9,color:C.dim}}>FRECUENCIA DOMINANTE</div>
+        <div style={{fontFamily:MONO,fontSize:28,fontWeight:700,color:col,textShadow:`0 0 14px ${col}`}}>
+          {peak>=1000?(peak/1000).toFixed(2)+"kHz":peak+" Hz"}
+        </div>
+      </div>}
+      <canvas ref={cRef} width={640} height={200}
+        style={{width:"100%",borderRadius:10,border:`1px solid rgba(${rgb(col)},0.25)`,background:"#000"}}/>
+      {err&&<div style={{color:C.red,fontFamily:MONO,fontSize:10}}>{err}</div>}
+      {!on&&<button style={S.btn("p",col)} onClick={start}>Activar micrófono</button>}
+      <div style={S.note}>Escala logarítmica 20Hz–20kHz. Detecta 50/60Hz (ruido eléctrico), armónicos, resonancias. Útil para diagnóstico de motores y transformadores.</div>
+    </div>
+  );
+}
+
+// ── Vibrómetro ─────────────────────────────────────────────────────────────────
+function ToolVibrómetro() {
+  const col = C.orange;
+  const [on,setOn]=useState(false),[err,setErr]=useState(null);
+  const [mag,setMag]=useState(0),[peak,setPeak]=useState(0),[domFreq,setDomFreq]=useState(null);
+  const [samples,setSamples]=useState([]);
+  const hRef=useRef(), cRef=useRef(), rafRef=useRef();
+  const BUF_SIZE=256, SAMPLE_RATE=50;
+
+  const startSensor=()=>{
+    const buf=[];
+    const h=e=>{
+      const a=e.accelerationIncludingGravity;
+      if(!a) return;
+      const m=Math.sqrt((a.x||0)**2+(a.y||0)**2+(a.z||0)**2);
+      const g=9.81, vibMag=Math.abs(m-g);
+      setMag(+vibMag.toFixed(3));
+      setPeak(p=>Math.max(p,vibMag));
+      buf.push(vibMag);
+      if(buf.length>BUF_SIZE) buf.shift();
+      setSamples([...buf]);
+      // FFT simple: encontrar frecuencia dominante
+      if(buf.length===BUF_SIZE){
+        let maxAmp=0,maxK=0;
+        for(let k=1;k<BUF_SIZE/2;k++){
+          let re=0,im=0;
+          for(let n=0;n<BUF_SIZE;n++){
+            re+=buf[n]*Math.cos(2*Math.PI*k*n/BUF_SIZE);
+            im-=buf[n]*Math.sin(2*Math.PI*k*n/BUF_SIZE);
+          }
+          const amp=Math.sqrt(re*re+im*im);
+          if(amp>maxAmp){maxAmp=amp;maxK=k;}
+        }
+        setDomFreq(+(maxK*SAMPLE_RATE/BUF_SIZE).toFixed(1));
+      }
+    };
+    hRef.current=h;
+    window.addEventListener("devicemotion",h,true);
+    setOn(true);setErr(null);setPeak(0);
+  };
+
+  const start=async()=>{
+    if(typeof DeviceMotionEvent?.requestPermission==="function"){
+      try{const p=await DeviceMotionEvent.requestPermission();if(p!=="granted"){setErr("Permiso denegado");return;}}
+      catch(e){setErr(e.message);return;}
+    }
+    startSensor();
+  };
+
+  const stop=()=>{
+    if(hRef.current) window.removeEventListener("devicemotion",hRef.current,true);
+    setOn(false);
+  };
+
+  useEffect(()=>{
+    if(typeof DeviceMotionEvent?.requestPermission!=="function") startSensor();
+    return()=>{if(hRef.current) window.removeEventListener("devicemotion",hRef.current,true);};
+  },[]);
+
+  // Canvas
+  useEffect(()=>{
+    const c=cRef.current; if(!c||samples.length<2) return;
+    const ctx=c.getContext("2d"),W=c.width,H=c.height;
+    ctx.fillStyle="rgba(0,0,0,0.85)";ctx.fillRect(0,0,W,H);
+    const mx=Math.max(...samples,0.1);
+    ctx.strokeStyle=col;ctx.lineWidth=2;ctx.beginPath();
+    samples.forEach((v,i)=>{
+      const x=i/samples.length*W, y=H-(v/mx)*(H-4)-2;
+      i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);
+    });
+    ctx.stroke();
+  },[samples]);
+
+  const vibLevel = mag<0.05?"✓ Quieto":mag<0.2?"◉ Leve":mag<0.5?"⊘ Moderado":"⚠ Fuerte";
+
+  return (
+    <div style={S.wrap}>
+      <div style={S.st(col)}>▸ Vibrómetro</div>
+      {on&&<button style={S.btn("r")} onClick={stop}>⏹ Detener</button>}
+      <div style={{display:"flex",gap:8}}>
+        <div style={{...S.disp(col),flex:2,textAlign:"center",padding:"16px 8px"}}>
+          <div style={{fontFamily:MONO,fontSize:44,fontWeight:700,color:col,lineHeight:1,textShadow:`0 0 20px ${col}`}}>
+            {mag.toFixed(3)}
+          </div>
+          <div style={{fontFamily:MONO,fontSize:11,color:C.dim}}>m/s²</div>
+          <div style={S.dlbl}>{vibLevel}</div>
+        </div>
+        <div style={{display:"flex",flexDirection:"column",gap:8,flex:1}}>
+          <div style={{...S.disp(C.red),textAlign:"center",flex:1,padding:"10px 4px"}}>
+            <div style={{fontFamily:MONO,fontSize:9,color:C.dim}}>PICO</div>
+            <div style={{fontFamily:MONO,fontSize:18,fontWeight:700,color:C.red}}>{peak.toFixed(3)}</div>
+          </div>
+          {domFreq&&<div style={{...S.disp(C.amber),textAlign:"center",flex:1,padding:"10px 4px"}}>
+            <div style={{fontFamily:MONO,fontSize:9,color:C.dim}}>FREC. DOM.</div>
+            <div style={{fontFamily:MONO,fontSize:16,fontWeight:700,color:C.amber}}>{domFreq}Hz</div>
+          </div>}
+        </div>
+      </div>
+      <canvas ref={cRef} width={640} height={80}
+        style={{width:"100%",borderRadius:8,border:`1px solid rgba(${rgb(col)},0.25)`,background:"#000"}}/>
+      {err&&<div style={{color:C.red,fontFamily:MONO,fontSize:10}}>{err}</div>}
+      {!on&&typeof DeviceMotionEvent?.requestPermission==="function"&&
+        <button style={S.btn("p",col)} onClick={start}>Activar vibrómetro</button>}
+      <div style={S.note}>Apoyá el celular sobre el equipo. Detecta vibración mecánica y su frecuencia dominante. Útil para rodamientos, motores, transformadores.</div>
+    </div>
+  );
+}
+
+// ── PPG / Pulso cardíaco ──────────────────────────────────────────────────────
+function ToolPPG() {
+  const col = C.red;
+  const vRef=useRef(),cRef=useRef(),rafRef=useRef(),stRef=useRef(),tkRef=useRef();
+  const [on,setOn]=useState(false),[phase,setPhase]=useState("idle");
+  const [bpm,setBpm]=useState(null),[signal,setSignal]=useState([]);
+  const [err,setErr]=useState(null);
+  const samplesRef=useRef([]);
+
+  const start=async()=>{
+    try{
+      const s=await navigator.mediaDevices.getUserMedia({video:{facingMode:"environment",width:{ideal:640}}});
+      stRef.current=s; vRef.current.srcObject=s; await vRef.current.play();
+      const track=s.getVideoTracks()[0];
+      tkRef.current=track;
+      try{await track.applyConstraints({advanced:[{torch:true}]});}catch(_e){}
+      setOn(true);setPhase("measuring");setErr(null);
+      samplesRef.current=[];
+      const c=cRef.current;
+      const detect=()=>{
+        if(!vRef.current||!c) return;
+        c.width=32;c.height=32;
+        const ctx=c.getContext("2d");
+        ctx.drawImage(vRef.current,0,0,32,32);
+        const d=ctx.getImageData(0,0,32,32).data;
+        let r=0;for(let i=0;i<d.length;i+=4) r+=d[i];
+        r=r/(32*32);
+        samplesRef.current.push(r);
+        setSignal([...samplesRef.current.slice(-150)]);
+        // Detectar BPM a partir de 5 segundos (250 muestras a ~50fps aprox)
+        const samples=samplesRef.current;
+        if(samples.length>200){
+          // Encontrar picos (máximos locales)
+          const peaks=[];
+          for(let i=2;i<samples.length-2;i++){
+            if(samples[i]>samples[i-1]&&samples[i]>samples[i-2]&&
+               samples[i]>samples[i+1]&&samples[i]>samples[i+2]&&
+               samples[i]>samples.reduce((a,b)=>a+b)/samples.length*1.005){
+              if(peaks.length===0||i-peaks[peaks.length-1]>10)
+                peaks.push(i);
+            }
+          }
+          if(peaks.length>2){
+            const intervals=[];
+            for(let i=1;i<peaks.length;i++) intervals.push(peaks[i]-peaks[i-1]);
+            const avgInterval=intervals.reduce((a,b)=>a+b)/intervals.length;
+            // Asumiendo ~30fps en el loop RAF
+            const fps=30;
+            setBpm(Math.round(60/(avgInterval/fps)));
+          }
+        }
+        rafRef.current=requestAnimationFrame(detect);
+      };
+      rafRef.current=requestAnimationFrame(detect);
+    }catch(e){setErr(e.message);}
+  };
+
+  const stop=()=>{
+    cancelAnimationFrame(rafRef.current);
+    try{tkRef.current?.applyConstraints({advanced:[{torch:false}]});}catch(_e){}
+    stRef.current?.getTracks().forEach(t=>t.stop());
+    if(vRef.current) vRef.current.srcObject=null;
+    setOn(false);setPhase("idle");setBpm(null);setSignal([]);
+    samplesRef.current=[];
+  };
+
+  useEffect(()=>()=>{
+    cancelAnimationFrame(rafRef.current);
+    try{tkRef.current?.applyConstraints({advanced:[{torch:false}]});}catch(_e){}
+    stRef.current?.getTracks().forEach(t=>t.stop());
+  },[]);
+
+  const bpmCol=bpm?bpm>100?C.red:bpm>60?C.green:C.amber:col;
+
+  return (
+    <div style={S.wrap}>
+      <div style={S.st(col)}>▸ PPG — Pulso Cardíaco</div>
+      {on&&<button style={S.btn("r")} onClick={stop}>⏹ Detener</button>}
+
+      <div style={{...glass(col,0.07),borderRadius:12,padding:14,border:`1px solid rgba(${rgb(col)},0.25)`,marginBottom:4}}>
+        <div style={{fontFamily:MONO,fontSize:10,color:col,fontWeight:700,marginBottom:8}}>INSTRUCCIONES</div>
+        <div style={{fontFamily:MONO,fontSize:10,color:C.dim,lineHeight:1.8}}>
+          1. Colocá la punta del dedo índice sobre la cámara trasera<br/>
+          2. Cubrí bien el lente y el flash<br/>
+          3. Mantené el dedo quieto durante 10 segundos
+        </div>
+      </div>
+
+      <video ref={vRef} style={{display:"none"}} playsInline muted/>
+      <canvas ref={cRef} style={{display:"none"}}/>
+
+      {bpm&&(
+        <div style={{...S.disp(bpmCol),textAlign:"center",padding:"20px 16px"}}>
+          <div style={{fontFamily:MONO,fontSize:9,color:C.dim}}>FRECUENCIA CARDÍACA</div>
+          <div style={{fontFamily:MONO,fontSize:64,fontWeight:700,color:bpmCol,lineHeight:1,
+            textShadow:`0 0 30px ${bpmCol}`}}>{bpm}</div>
+          <div style={{fontFamily:MONO,fontSize:14,color:C.dim}}>BPM</div>
+          <div style={{fontFamily:MONO,fontSize:11,color:bpmCol,marginTop:4}}>
+            {bpm>100?"Taquicardia":bpm<60?"Bradicardia":"Normal"}
+          </div>
+        </div>
+      )}
+
+      {signal.length>5&&(
+        <TimeChart data={signal.map(v=>v||null)} col={col} height={80}/>
+      )}
+
+      {!bpm&&on&&(
+        <div style={{...S.disp(col),textAlign:"center",padding:16}}>
+          <div style={{fontFamily:MONO,fontSize:12,color:col}}>
+            {signal.length<50?"Colocá el dedo sobre la cámara…":"Analizando pulso…"}
+          </div>
+          <div style={{fontFamily:MONO,fontSize:11,color:C.dim,marginTop:4}}>
+            {Math.min(100,Math.round(signal.length/2))}% completado
+          </div>
+        </div>
+      )}
+
+      {err&&<div style={{color:C.red,fontFamily:MONO,fontSize:10}}>{err}</div>}
+      {!on&&<button style={S.btn("p",col)} onClick={start}>❤ Medir pulso</button>}
+      <div style={S.note}>Orientativo — no reemplaza un oxímetro médico. Útil para verificar el funcionamiento de sensores PPG en equipos biomédicos.</div>
+    </div>
+  );
+}
 
 // ── Conectividad — herramientas avanzadas ────────────────────────────────────
 
