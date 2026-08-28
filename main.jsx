@@ -1875,6 +1875,7 @@ function SensorTester({ onResult }) {
             Probar de nuevo
           </button>
         </div>
+
       )}
     </div>
   );
@@ -2098,6 +2099,7 @@ function ToolOscilo() {
   return (
     <div style={S.wrap}>
       <div style={S.st(col)}>▸ Osciloscopio de Audio</div>
+
       <canvas ref={cRef} width={640} height={200}
         style={{width:"100%",borderRadius:10,border:`1px solid rgba(${rgb(col)},0.3)`,background:"rgba(0,0,0,0.85)"}}/>
       {freq&&on&&(
