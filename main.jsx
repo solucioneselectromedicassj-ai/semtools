@@ -101,9 +101,9 @@ const TOOL = {
 };
 
 const BLOCKS = [
-  { id:"celular",  icon:"📱", label:"CELULAR",     col:C.cyan,   tools:["decibeles","nivel","brujula","oscilo","vibro","espectro","generador","sistema","qr","ir","nfc"] },
+  { id:"celular",  icon:"📱", label:"CELULAR",     col:C.cyan,   tools:["decibeles","nivel","brujula","oscilo","vibro","espectro","generador","ecggen","sistema","qr","ir","nfc"] },
   { id:"camara",   icon:"📷", label:"CÁMARA + IA", col:C.violet, tools:["resistencias","integrados","distancia","endoscopio","ppg"] },
-  { id:"jack",     icon:"🔌", label:"JACK 3.5mm",  col:C.orange, tools:["jack_thermo","jack_thermo2","jack_air","jack_volt","jack_light","jack_raw","spo2","ecg"] },
+  { id:"jack",     icon:"🔌", label:"JACK 3.5mm",  col:C.orange, tools:["jack_thermo","jack_thermo2","jack_air","jack_volt","jack_light","jack_raw","spo2","ecg","conductimetro"] },
   { id:"celularplus", icon:"📶", label:"CONECTIVIDAD", col:C.blue, tools:["red","ping","lan","http","ble","ipinfo"] },
   { id:"modulos",  icon:"📡", label:"MÓDULOS",     col:C.green,  tools:["modulos"] },
 ];
@@ -2370,6 +2370,319 @@ function ToolPPG() {
       {err&&<div style={{color:C.red,fontFamily:MONO,fontSize:10}}>{err}</div>}
       {!on&&<button style={S.btn("p",col)} onClick={start}>❤ Medir pulso</button>}
       <div style={S.note}>Orientativo — no reemplaza un oxímetro médico. Útil para verificar el funcionamiento de sensores PPG en equipos biomédicos.</div>
+    </div>
+  );
+}
+
+
+// ── Generador ECG — simulador PQRST estéreo ───────────────────────────────────
+function ToolECGGen() {
+  const col = C.green;
+  const [on,setOn]=useState(false);
+  const [bpm,setBpm]=useState(60),[amp,setAmp]=useState(0.5);
+  const [lead,setLead]=useState("I");
+  const ctxRef=useRef(),bufRef=useRef(),srcRef=useRef(),cRef=useRef();
+
+  // Generar un período de ECG sintético (PQRST)
+  const makeECG=(sampleRate,bpmVal,leadName)=>{
+    const T=Math.round(sampleRate*60/bpmVal);
+    const buf=new Float32Array(T);
+    const G=(t,mu,sig,a)=>a*Math.exp(-((t-mu)**2)/(2*sig**2));
+    // Derivaciones: diferentes amplitudes de ondas
+    const leads={
+      "I":  {p:0.15,q:-0.05,r:1.0, s:-0.15,t:0.30},
+      "II": {p:0.20,q:-0.10,r:1.2, s:-0.10,t:0.35},
+      "III":{p:0.05,q:-0.05,r:0.8, s:-0.05,t:0.20},
+      "aVR":{p:-0.15,q:0.05,r:-1.0,s:0.15, t:-0.30},
+      "aVL":{p:0.10,q:-0.05,r:0.6, s:-0.10,t:0.20},
+      "V1": {p:0.10,q:-0.10,r:0.3, s:-0.8, t:0.15},
+      "V5": {p:0.15,q:-0.05,r:1.1, s:-0.05,t:0.40},
+    };
+    const w=leads[leadName]||leads["I"];
+    for(let i=0;i<T;i++){
+      const x=i/T;
+      buf[i]=G(x,0.15,0.025,w.p)+G(x,0.36,0.012,w.q)+
+             G(x,0.40,0.008,w.r)+G(x,0.44,0.010,w.s)+G(x,0.65,0.040,w.t);
+    }
+    return buf;
+  };
+
+  const start=()=>{
+    const ctx=new (window.AudioContext||window.webkitAudioContext)();
+    const sampleRate=ctx.sampleRate;
+    const buf1=makeECG(sampleRate,bpm,"I");   // Lead I → canal L
+    const buf2=makeECG(sampleRate,bpm,lead);  // Lead elegido → canal R
+    // Crear buffer estéreo (2 canales)
+    const abuf=ctx.createBuffer(2,buf1.length,sampleRate);
+    const chL=abuf.getChannelData(0), chR=abuf.getChannelData(1);
+    for(let i=0;i<buf1.length;i++){chL[i]=buf1[i]*amp; chR[i]=buf2[i]*amp;}
+    // Repetir en loop
+    const src2=ctx.createBufferSource();
+    src2.buffer=abuf; src2.loop=true;
+    src2.connect(ctx.destination); src2.start();
+    ctxRef.current=ctx; srcRef.current=src2;
+    bufRef.current={buf1,buf2};
+    setOn(true);
+    // Dibujar en canvas
+    drawWave(buf1,buf2);
+  };
+
+  const stop=()=>{ srcRef.current?.stop(); ctxRef.current?.close(); setOn(false); };
+
+  const drawWave=(b1,b2)=>{
+    const c=cRef.current; if(!c) return;
+    const ctx=c.getContext("2d"),W=c.width,H=c.height,H2=H/2;
+    ctx.fillStyle="#000";ctx.fillRect(0,0,W,H);
+    ctx.strokeStyle="rgba(255,255,255,0.05)";ctx.lineWidth=1;
+    ctx.beginPath();ctx.moveTo(0,H2);ctx.lineTo(W,H2);ctx.stroke();
+    [[b1,C.green,"Lead I (L)"],[b2,C.cyan,`${lead} (R)`]].forEach(([buf,col2,lbl],ci)=>{
+      const show=buf.slice(0,Math.min(buf.length,W));
+      ctx.strokeStyle=col2; ctx.lineWidth=2; ctx.beginPath();
+      const yOff=ci===0?H2*0.5:H2*1.5;
+      show.forEach((v,i)=>{
+        const x=i/show.length*W, y=yOff-v*(H2*0.4);
+        i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);
+      });
+      ctx.stroke();
+      ctx.fillStyle=col2; ctx.font="8px monospace";
+      ctx.fillText(lbl,4,ci===0?12:H2+12);
+    });
+  };
+
+  useEffect(()=>()=>{srcRef.current?.stop();ctxRef.current?.close();},[]);
+  useEffect(()=>{ if(on){stop();setTimeout(start,100);} },[bpm,amp,lead]);
+  useEffect(()=>{ if(bufRef.current) drawWave(bufRef.current.buf1,bufRef.current.buf2); },[lead]);
+
+  const LEADS=["I","II","III","aVR","aVL","V1","V5"];
+
+  return (
+    <div style={S.wrap}>
+      <div style={S.st(col)}>▸ Generador ECG — Simulador PQRST</div>
+      {on&&<button style={S.btn("r")} onClick={stop}>⏹ Detener</button>}
+
+      <div style={{...glass(col,0.06),borderRadius:12,padding:"10px 14px",
+        border:`1px solid rgba(${rgb(col)},0.2)`,marginBottom:4}}>
+        <div style={{fontFamily:MONO,fontSize:9,color:col,fontWeight:700,marginBottom:4}}>USO</div>
+        <div style={{fontFamily:MONO,fontSize:10,color:C.dim,lineHeight:1.7}}>
+          Genera señal ECG sintética por el jack de audio para calibrar y probar equipos ECG.
+          Canal L → Lead I siempre. Canal R → derivación seleccionada.
+        </div>
+      </div>
+
+      {/* Preview ECG */}
+      <canvas ref={cRef} width={640} height={120}
+        style={{width:"100%",borderRadius:8,border:`1px solid rgba(${rgb(col)},0.25)`,background:"#000"}}/>
+
+      {/* BPM */}
+      <div style={{display:"flex",alignItems:"center",gap:10}}>
+        <span style={{fontFamily:MONO,fontSize:10,color:C.dim,whiteSpace:"nowrap"}}>
+          {bpm} BPM
+        </span>
+        <input type="range" min={30} max={200} value={bpm} style={{flex:1,accentColor:col}}
+          onChange={e=>{setBpm(+e.target.value);if(bufRef.current)drawWave(...Object.values(bufRef.current));}}/>
+      </div>
+      <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
+        {[40,60,80,100,120,150].map(v=>(
+          <button key={v} style={{border:`1px solid ${bpm===v?col:C.bord}`,borderRadius:6,
+            padding:"4px 8px",cursor:"pointer",fontFamily:MONO,fontSize:9,
+            color:bpm===v?col:C.dim,background:bpm===v?`rgba(${rgb(col)},0.12)`:"rgba(255,255,255,0.04)"}}
+            onClick={()=>setBpm(v)}>{v}</button>
+        ))}
+      </div>
+
+      {/* Amplitud */}
+      <div style={{display:"flex",alignItems:"center",gap:10}}>
+        <span style={{fontFamily:MONO,fontSize:10,color:C.dim,whiteSpace:"nowrap"}}>
+          Amp {Math.round(amp*100)}%
+        </span>
+        <input type="range" min={0.05} max={1} step={0.05} value={amp}
+          style={{flex:1,accentColor:col}} onChange={e=>setAmp(+e.target.value)}/>
+      </div>
+
+      {/* Derivación canal R */}
+      <div style={{fontFamily:MONO,fontSize:9,color:C.dim,marginBottom:4}}>DERIVACIÓN CANAL R:</div>
+      <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
+        {LEADS.map(l=>(
+          <button key={l} style={{border:`1px solid ${lead===l?col:C.bord}`,borderRadius:6,
+            padding:"5px 10px",cursor:"pointer",fontFamily:MONO,fontSize:10,
+            color:lead===l?col:C.dim,background:lead===l?`rgba(${rgb(col)},0.12)`:"rgba(255,255,255,0.04)"}}
+            onClick={()=>setLead(l)}>{l}</button>
+        ))}
+      </div>
+
+      {!on
+        ?<button style={S.btn("p",col)} onClick={start}>▶ Iniciar generador ECG</button>
+        :<div style={{fontFamily:MONO,fontSize:10,color:col,textAlign:"center",
+          padding:"8px",background:`rgba(${rgb(col)},0.08)`,borderRadius:8}}>
+          ● Generando ECG — {bpm} BPM · Lead I (L) · {lead} (R)
+        </div>
+      }
+      <div style={S.note}>
+        Conectá el jack al equipo ECG a calibrar. Sirve para verificar cables, electrodos, amplificadores y pantallas de monitores multiparamétricos.
+      </div>
+    </div>
+  );
+}
+
+// ── Conductímetro por Jack ────────────────────────────────────────────────────
+function ToolConductimetro() {
+  const col = C.blue;
+  const [on,setOn]=useState(false),[err,setErr]=useState(null);
+  const [cond,setCond]=useState(null),[res,setRes]=useState(null);
+  const [kCell,setKCell]=useState(1.0); // constante de celda (cm⁻¹)
+  const [calOpen,setCalOpen]=useState(false),[calSol,setCalSol]=useState("1413");
+  const [trend,setTrend]=useState([]);
+  const ctxRef=useRef(),srcRef=useRef(),anlRef=useRef(),rafRef=useRef(),stRef=useRef();
+  const R_REF=10000; // resistencia de referencia 10kΩ
+
+  const start=async()=>{
+    try{
+      // Salida: tono 1kHz (excitación AC para evitar electrólisis)
+      const ctx=new (window.AudioContext||window.webkitAudioContext)();
+      const osc=ctx.createOscillator(); osc.frequency.value=1000;
+      const gain=ctx.createGain(); gain.gain.value=0.8;
+      osc.connect(gain); gain.connect(ctx.destination); osc.start();
+      ctxRef.current=ctx; srcRef.current=osc;
+
+      // Entrada: micrófono (lee voltaje a través de R_REF)
+      const s=await navigator.mediaDevices.getUserMedia({
+        audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:false}
+      });
+      stRef.current=s;
+      const micSrc=ctx.createMediaStreamSource(s);
+      const anl=ctx.createAnalyser(); anl.fftSize=4096; anl.smoothingTimeConstant=0.8;
+      micSrc.connect(anl); anlRef.current=anl;
+      setOn(true); setErr(null);
+
+      const td=new Float32Array(anl.fftSize);
+      const measure=()=>{
+        anl.getFloatTimeDomainData(td);
+        // Calcular RMS → proporcional a V_ref
+        const rms=Math.sqrt(td.reduce((a,v)=>a+v*v,0)/td.length);
+        if(rms>0.001){
+          // V_out=0.8 (normalizado), V_ref=rms
+          // R_sol = R_ref*(V_out/V_ref - 1)
+          const vOut=0.8, vRef=rms;
+          const rSol=R_REF*(vOut/vRef-1);
+          if(rSol>0){
+            const conductivity=kCell/rSol*1e6; // µS/cm → convertir a mS/cm
+            const condMs=conductivity/1000;
+            setRes(Math.round(rSol));
+            setCond(condMs.toFixed(3));
+            setTrend(h=>[...h.slice(-59),condMs]);
+          }
+        }
+        rafRef.current=requestAnimationFrame(measure);
+      };
+      rafRef.current=requestAnimationFrame(measure);
+    }catch(e){setErr(e.message);}
+  };
+
+  const stop=()=>{
+    cancelAnimationFrame(rafRef.current);
+    srcRef.current?.stop(); ctxRef.current?.close();
+    stRef.current?.getTracks().forEach(t=>t.stop());
+    setOn(false); setCond(null); setRes(null);
+  };
+
+  // Calibración con solución conocida
+  const calibrate=()=>{
+    const target=parseFloat(calSol)/1000; // µS/cm → mS/cm
+    if(res&&res>0&&target>0){
+      const newK=target*res/1e6*1000;
+      setKCell(+newK.toFixed(4));
+      setCalOpen(false);
+    }
+  };
+
+  useEffect(()=>()=>{
+    cancelAnimationFrame(rafRef.current);
+    srcRef.current?.stop(); ctxRef.current?.close();
+    stRef.current?.getTracks().forEach(t=>t.stop());
+  },[]);
+
+  const REFS_CAL=[
+    {label:"Agua destilada",val:"2"},
+    {label:"KCl 0.01M",val:"1413"},
+    {label:"Agua de red típica",val:"300"},
+    {label:"Suero fisiológico",val:"15000"},
+    {label:"Agua mar",val:"50000"},
+  ];
+
+  const condNum=parseFloat(cond);
+  const condCol=!cond?col:condNum<0.01?C.green:condNum<1?C.cyan:condNum<10?C.amber:C.red;
+  const condLabel=!cond?"---":condNum<0.01?"Agua muy pura":condNum<0.5?"Agua potable":
+    condNum<2?"Agua red":condNum<10?"Solución diluida":condNum<50?"Sol. biológica":"Alta conductividad";
+
+  return (
+    <div style={S.wrap}>
+      <div style={S.st(col)}>▸ Conductímetro — mS/cm</div>
+      {on&&<button style={S.btn("r")} onClick={stop}>⏹ Detener</button>}
+
+      {/* Hardware */}
+      <div style={{...glass(col,0.06),borderRadius:12,padding:"12px 14px",
+        border:`1px solid rgba(${rgb(col)},0.25)`}}>
+        <div style={{fontFamily:MONO,fontSize:9,color:col,fontWeight:700,marginBottom:6,letterSpacing:2}}>
+          MÓDULO CONDUCTÍMETRO REQUERIDO
+        </div>
+        {["2× electrodo de acero inox (distancia fija: 1cm)",
+          "1× resistencia 10kΩ (R referencia)",
+          "Conector TRRS: Tip→excitación AC · Ring2→señal",
+          "Celda de medición: tubo con electrodos separados 1cm"].map((item,i)=>(
+          <div key={i} style={{fontFamily:MONO,fontSize:9,color:C.dim,lineHeight:1.8}}>
+            <span style={{color:col}}>▸ </span>{item}
+          </div>
+        ))}
+      </div>
+
+      {/* Display */}
+      <div style={{...S.disp(condCol),textAlign:"center",padding:"20px 16px"}}>
+        <div style={{fontFamily:MONO,fontSize:64,fontWeight:700,color:condCol,
+          lineHeight:1,textShadow:`0 0 24px ${condCol}`}}>
+          {cond??"---.---"}
+        </div>
+        <div style={{fontFamily:MONO,fontSize:14,color:C.dim,marginTop:4}}>mS/cm</div>
+        <div style={{fontFamily:MONO,fontSize:11,color:condCol,marginTop:4,fontWeight:700}}>
+          {condLabel}
+        </div>
+        {res&&<div style={{fontFamily:MONO,fontSize:9,color:C.dim,marginTop:4}}>
+          R = {res} Ω · K = {kCell} cm⁻¹
+        </div>}
+      </div>
+
+      {trend.length>2&&<TimeChart data={trend} col={col} unit=" mS/cm" height={70}/>}
+
+      {/* Calibración */}
+      <CalButton onOpen={()=>setCalOpen(o=>!o)} active={kCell!==1.0}/>
+      {calOpen&&(
+        <CalPanel title="CONDUCTÍMETRO" onClose={()=>setCalOpen(false)}
+          onReset={()=>{setKCell(1.0);setCalOpen(false);}}>
+          <div style={{fontFamily:MONO,fontSize:10,color:C.dim,lineHeight:1.7,marginBottom:10}}>
+            Sumergí los electrodos en una solución de conductividad conocida y elegí cuál es:
+          </div>
+          {res&&<div style={{fontFamily:MONO,fontSize:11,color:C.text,marginBottom:8}}>
+            Leyendo ahora: <span style={{color:col,fontWeight:700}}>{res} Ω</span>
+          </div>}
+          <div style={{display:"flex",flexDirection:"column",gap:6}}>
+            {REFS_CAL.map(r=>(
+              <button key={r.val} style={{border:`1px solid rgba(${rgb(col)},0.3)`,borderRadius:8,
+                padding:"8px 12px",cursor:"pointer",textAlign:"left",
+                background:calSol===r.val?`rgba(${rgb(col)},0.12)`:"rgba(255,255,255,0.03)"}}
+                onClick={()=>{setCalSol(r.val);calibrate();}}>
+                <div style={{fontFamily:MONO,fontSize:11,color:C.text}}>{r.label}</div>
+                <div style={{fontFamily:MONO,fontSize:9,color:C.dim}}>{r.val} µS/cm</div>
+              </button>
+            ))}
+          </div>
+        </CalPanel>
+      )}
+
+      {err&&<div style={{color:C.red,fontFamily:MONO,fontSize:10}}>{err}</div>}
+      {!on&&<button style={S.btn("p",col)} onClick={start}>Conectar conductímetro</button>}
+      <div style={S.note}>
+        Medición AC a 1kHz — no causa electrólisis. Rangos: agua pura 0.001 · potable 0.05-0.5 · mar ~50 mS/cm.
+        Calibrá siempre con solución de referencia conocida.
+      </div>
     </div>
   );
 }
