@@ -340,10 +340,11 @@ async function runSensorDetection() {
   return caps;
 }
 
-function Onboarding({ onDone }) {
+function Onboarding({ onDone, startStep=null }) {
   // Detectar proveedor actual para pre-seleccionar tab
   const currentKey = (() => { try{ return localStorage.getItem("sem_gemini_key")||""; }catch(_e){ return ""; } })();
   const [step,    setStep]    = useState(()=>{
+    if(startStep) return startStep;
     try{ return localStorage.getItem("sem_gemini_key") ? 2 : 1; }
     catch(_e){ return 1; }
   });
@@ -4149,6 +4150,7 @@ class ErrorBoundary extends React.Component {
 
 function App() {
   const [tool,setTool]=useState(null);
+  const [onboardStep,setOnboardStep]=useState(null); // null=auto, 1=forzar paso 1, 2=forzar paso 2
   const [showOnboard,setShowOnboard]=useState(()=>{
     try{ const k=localStorage.getItem("sem_gemini_key"); return !k; }
     catch(_e){ return false; }
@@ -4166,6 +4168,7 @@ function App() {
     window.__semRediagnose = () => {
       try{ localStorage.removeItem("sem_caps"); }catch(_e){}
       setCaps(null);
+      setOnboardStep(2);
       setShowOnboard(true);
     };
     return ()=>{ delete window.__semRediagnose; };
@@ -4196,7 +4199,7 @@ function App() {
 
   return (
     <div style={S.app}>
-      {showOnboard && <Onboarding onDone={c=>{setCaps(c);setShowOnboard(false);}}/>}
+      {showOnboard && <Onboarding onDone={c=>{setCaps(c);setShowOnboard(false);setOnboardStep(null);}} startStep={onboardStep}/>}
       <div style={S.hdr}>
         {tool&&<button style={{border:"none",background:"none",color:col,fontFamily:MONO,fontSize:22,cursor:"pointer",padding:"0 8px 0 0",textShadow:`0 0 12px ${col}66`}} onClick={()=>setTool(null)}>←</button>}
         <div>
@@ -4212,7 +4215,7 @@ function App() {
           <button style={{border:"none",background:"rgba(255,255,255,0.06)",borderRadius:8,
             padding:"5px 10px",cursor:"pointer",fontFamily:MONO,fontSize:8,color:C.dim,
             display:"flex",alignItems:"center",gap:4}}
-            onClick={()=>setShowOnboard(true)}
+            onClick={()=>{setOnboardStep(1);setShowOnboard(true);}}
             title="Cambiar API key de IA">
             🔑
             <span style={{fontSize:7,letterSpacing:.5,opacity:.7}}>IA</span>
