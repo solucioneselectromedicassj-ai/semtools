@@ -4373,6 +4373,35 @@ function ToolSistema() {
           </div>
         ) : null;
       })()}
+      {/* Modo desarrollador — activa todos los módulos */}
+      {(()=>{
+        const ALL_MODS=["aquapanel","ecgmodule","condmod","cloromod","tacolasr","oscilo2","comptest"];
+        const [devMode,setDevMode]=useState(()=>ALL_MODS.every(m=>isModActive(m)));
+        return (
+          <div style={{...glass(C.amber,0.07),borderRadius:12,padding:"14px 16px",
+            border:`1px solid rgba(${rgb(C.amber)},0.3)`}}>
+            <div style={{fontFamily:MONO,fontSize:9,color:C.amber,fontWeight:700,
+              letterSpacing:2,marginBottom:8}}>🔧 MODO DESARROLLADOR</div>
+            <div style={{fontFamily:MONO,fontSize:10,color:C.dim,lineHeight:1.7,marginBottom:10}}>
+              Activa todos los módulos físicos para pruebas y desarrollo.
+              Desactivar antes de publicar la versión pública.
+            </div>
+            <button style={{...S.btn(devMode?"r":"p",C.amber)}} onClick={()=>{
+              if(devMode){
+                ALL_MODS.forEach(m=>deactivateMod(m)); setDevMode(false);
+              } else {
+                ALL_MODS.forEach(m=>activateMod(m)); setDevMode(true);
+              }
+            }}>
+              {devMode?"🔒 Desactivar modo desarrollador":"🔓 Activar todos los módulos (dev)"}
+            </button>
+            {devMode&&<div style={{fontFamily:MONO,fontSize:9,color:C.amber,marginTop:8}}>
+              ✓ Todos los módulos activos — ORP, pH, ECG, AquaPanel, etc.
+            </div>}
+          </div>
+        );
+      })()}
+
       {/* Diagnóstico de hardware desde Sistema */}
       <div style={{...glass(C.cyan,0.06),borderRadius:12,padding:"14px 16px",
         border:`1px solid rgba(${rgb(C.cyan)},0.2)`}}>
