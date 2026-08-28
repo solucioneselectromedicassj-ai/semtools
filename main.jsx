@@ -1223,6 +1223,100 @@ function ToolDecibeles() {
       {err&&<div style={{color:C.red,fontFamily:MONO,fontSize:11}}>{err}</div>}
       {on?<button style={S.btn("r")} onClick={stop}>Detener</button>
          :<button style={S.btn("p",col)} onClick={start}>Activar micrófono</button>}
+
+      {/* Calibración por silencio */}
+      {(()=>{
+        const [calOpen, setCalOpen]  = React.useState(false);
+        const [phase,   setPhase]    = React.useState("intro");
+        const [prog,    setProg]     = React.useState(0);
+        const [meas,    setMeas]     = React.useState(null);
+        const cal = getCal("decibeles");
+        const isCalibrated = cal.offset !== 0;
+        const REFS = [
+          { label:"Habitación cerrada y silenciosa",  db:28, desc:"Noche, sin ruidos" },
+          { label:"Oficina tranquila",                db:38, desc:"Ventilación suave, personas lejanas" },
+          { label:"Habitación con ruido de fondo",    db:48, desc:"Ventilador, heladera, calle lejana" },
+          { label:"Exterior tranquilo",               db:42, desc:"Viento suave, sin tráfico" },
+        ];
+        const measure = () => {
+          if(!on){ alert("Activá el micrófono primero"); return; }
+          setPhase("measuring"); setProg(0); setMeas(null);
+          const samples=[]; const steps=25;
+          let i=0;
+          const t=setInterval(()=>{
+            if(db!==null) samples.push(db);
+            i++; setProg(Math.round(i/steps*100));
+            if(i>=steps){
+              clearInterval(t);
+              setMeas(samples.length>0?Math.round(samples.reduce((a,b)=>a+b)/samples.length):null);
+              setPhase("choose");
+            }
+          },200);
+        };
+        return (
+          <>
+            <CalButton onOpen={()=>{setCalOpen(o=>!o);setPhase("intro");}} active={isCalibrated}/>
+            {calOpen&&(
+              <CalPanel title="DECIBELÍMETRO"
+                onClose={()=>setCalOpen(false)}
+                onReset={()=>{resetCal("decibeles");setCalOpen(false);}}>
+                {phase==="intro"&&(
+                  <>
+                    <div style={{fontFamily:MONO,fontSize:10,color:C.dim,lineHeight:1.9,marginBottom:12}}>
+                      <span style={{color:C.amber,fontWeight:700}}>1.</span> Activá el micrófono{"
+"}
+                      <span style={{color:C.amber,fontWeight:700}}>2.</span> Buscá el lugar más silencioso que puedas{"
+"}
+                      <span style={{color:C.amber,fontWeight:700}}>3.</span> Quedate quieto y apretá el botón
+                    </div>
+                    <button style={S.btn("p",C.amber)} onClick={measure}>
+                      🤫 Medir silencio (5 segundos)
+                    </button>
+                  </>
+                )}
+                {phase==="measuring"&&(
+                  <div style={{textAlign:"center",padding:"8px 0"}}>
+                    <div style={{fontFamily:MONO,fontSize:13,color:C.amber,marginBottom:10}}>
+                      🤫 No hagas ruido…
+                    </div>
+                    <div style={{height:8,background:`rgba(${rgb(C.amber)},0.15)`,borderRadius:4,overflow:"hidden",marginBottom:8}}>
+                      <div style={{height:"100%",width:`${prog}%`,background:C.amber,borderRadius:4,transition:"width .15s"}}/>
+                    </div>
+                    <div style={{fontFamily:MONO,fontSize:24,fontWeight:700,color:C.amber}}>{db??"-"} dB</div>
+                  </div>
+                )}
+                {phase==="choose"&&meas!==null&&(
+                  <>
+                    <div style={{fontFamily:MONO,fontSize:11,color:C.text,marginBottom:12}}>
+                      Tu micrófono midió <span style={{color:C.amber,fontWeight:700}}>{meas} dB</span> en silencio.{"
+"}
+                      ¿Cómo describirías ese lugar?
+                    </div>
+                    <div style={{display:"flex",flexDirection:"column",gap:6}}>
+                      {REFS.map((ref,i)=>(
+                        <button key={i} style={{border:`1px solid rgba(${rgb(C.amber)},0.3)`,borderRadius:8,
+                          padding:"10px 12px",cursor:"pointer",textAlign:"left",
+                          background:"rgba(255,255,255,0.03)"}}
+                          onClick={()=>{
+                            saveCal("decibeles",{offset:ref.db-meas});
+                            setCalOpen(false); setPhase("intro");
+                          }}>
+                          <div style={{fontFamily:MONO,fontSize:11,fontWeight:700,color:C.text}}>{ref.label}</div>
+                          <div style={{fontFamily:MONO,fontSize:9,color:C.dim,marginTop:2}}>{ref.desc} · ref {ref.db} dB</div>
+                          <div style={{fontFamily:MONO,fontSize:9,color:C.amber,marginTop:2}}>
+                            → corrección {ref.db-meas>0?"+":""}{ref.db-meas} dB
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </CalPanel>
+            )}
+          </>
+        );
+      })()}
+
     </div>
   );
 }
