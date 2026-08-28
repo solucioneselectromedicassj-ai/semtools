@@ -1093,6 +1093,15 @@ function ToolJackSensor({ modId }) {
         style={{ width:"100%", borderRadius:8, border:`1px solid rgba(${rgb(col)},0.2)`,
                  background:"rgba(0,0,0,0.7)" }}/>
 
+      {/* Botón siempre visible ANTES del historial */}
+      {on
+        ?<button style={S.btn("r")} onClick={stop}>⏹ Desconectar</button>
+        :<button style={S.btn("p",col)} onClick={start}>Conectar {m.icon} {m.label}</button>
+      }
+
+      {/* Gráfica temporal */}
+      {trendData.length>2&&<TimeChart data={trendData} col={col} unit={" "+m.unit} height={80}/>}
+
       {/* Min/Max */}
       {(peak!==null||minV!==null) && (
         <div style={S.row}>
@@ -1112,14 +1121,7 @@ function ToolJackSensor({ modId }) {
       )}
 
       {err && <div style={{ color:C.amber, fontFamily:MONO, fontSize:10, lineHeight:1.6 }}>{err}</div>}
-      {/* Botón sticky */}
-      {on
-        ?<button style={{...S.btn("r"),position:"sticky",top:0,zIndex:10}} onClick={stop}>⏹ Desconectar</button>
-        :<button style={S.btn("p",col)} onClick={start}>Conectar {m.icon} {m.label}</button>
-      }
 
-      {/* Gráfica temporal */}
-      {trendData.length>2&&<TimeChart data={trendData} col={col} unit={" "+m.unit} height={80}/>}
       {m.stereo && <div style={S.note}>Conectá sonda 1 al canal L y sonda 2 al canal R del jack estéreo TRRS.</div>}
       {!m.stereo && <div style={S.note}>Conectá el sensor al jack 3.5mm. Ver manual para construir {m.label === "Temperatura" ? "ThermoJack" : m.icon+" módulo"}.</div>}
     </div>
@@ -1236,6 +1238,8 @@ function ToolDecibeles() {
 
       {/* Gráfica temporal */}
       {history.length>2&&<TimeChart data={history} col={col} unit=" dB" height={80}/>}
+
+
 
       {/* Calibración por silencio */}
       {(()=>{
