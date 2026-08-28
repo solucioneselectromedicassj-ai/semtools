@@ -103,7 +103,7 @@ const TOOL = {
 const BLOCKS = [
   { id:"celular",  icon:"📱", label:"CELULAR",     col:C.cyan,   tools:["decibeles","nivel","brujula","oscilo","vibro","espectro","generador","ecggen","sistema","qr","ir","nfc"] },
   { id:"camara",   icon:"📷", label:"CÁMARA + IA", col:C.violet, tools:["resistencias","integrados","distancia","endoscopio","ppg","cloro"] },
-  { id:"jack",     icon:"🔌", label:"JACK 3.5mm",  col:C.orange, tools:["jack_thermo","jack_thermo2","jack_air","jack_volt","jack_light","jack_raw","spo2","ecg","conductimetro"] },
+  { id:"jack",     icon:"🔌", label:"JACK 3.5mm",  col:C.orange, tools:["jack_thermo","jack_thermo2","jack_air","jack_volt","jack_light","jack_raw","spo2","ecg","conductimetro","orp","phjack"] },
   { id:"celularplus", icon:"📶", label:"CONECTIVIDAD", col:C.blue, tools:["red","ping","lan","http","ble","ipinfo"] },
   { id:"modulos",  icon:"📡", label:"MÓDULOS",     col:C.green,  tools:["modulos"] },
 ];
@@ -968,6 +968,224 @@ function JackManualPanel() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+
+// ── ORP — Potencial Redox (requiere SEM AquaPanel) ───────────────────────────
+function ToolORP() {
+  return (
+    <ModuleGate modName="SEM AquaPanel" modId="aquapanel">
+      <ToolORPInner/>
+    </ModuleGate>
+  );
+}
+
+function ToolORPInner() {
+  const col = C.violet;
+  const [on,setOn]=useState(false),[err,setErr]=useState(null);
+  const [orp,setOrp]=useState(null),[trend,setTrend]=useState([]);
+  const stRef=useRef(),anlRef=useRef(),rafRef=useRef();
+
+  // ORP: electrodo de platino genera mV proporcional al potencial redox
+  // Mismo circuito que pH (alta impedancia) — solo cambia el electrodo
+  // Señal muy pequeña (~0.5-1V rango típico) → amplificada al rango de audio
+  const start=async()=>{
+    try{
+      const s=await navigator.mediaDevices.getUserMedia({
+        audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:false}
+      });
+      stRef.current=s;
+      const ctx=new AudioContext(), src2=ctx.createMediaStreamSource(s);
+      const anl=ctx.createAnalyser(); anl.fftSize=4096; anl.smoothingTimeConstant=0.9;
+      src2.connect(anl); anlRef.current=anl;
+      setOn(true); setErr(null);
+      const td=new Float32Array(anl.fftSize);
+      // Calibración ORP: 0mV DC → 0V audio, ±1000mV → ±amplificado
+      // Factor depende del circuito (ganancia del INA128 configurada)
+      const cal = getCal("orp"); // offset en mV
+      const process=()=>{
+        anl.getFloatTimeDomainData(td);
+        const avg=td.reduce((a,v)=>a+v,0)/td.length;
+        // Convertir a mV: factor empírico según ganancia del circuito
+        const mvRaw = avg * 1000 * (cal.factor||1);
+        const mv = mvRaw + (cal.offset||0);
+        setOrp(Math.round(mv));
+        setTrend(h=>[...h.slice(-59),mv]);
+        rafRef.current=requestAnimationFrame(process);
+      };
+      rafRef.current=requestAnimationFrame(process);
+    }catch(e){setErr(e.message);}
+  };
+
+  const stop=()=>{
+    cancelAnimationFrame(rafRef.current);
+    stRef.current?.getTracks().forEach(t=>t.stop());
+    setOn(false);
+  };
+
+  useEffect(()=>()=>{cancelAnimationFrame(rafRef.current);stRef.current?.getTracks().forEach(t=>t.stop());},[]);
+
+  // Interpretación ORP para agua de diálisis
+  const orpStatus = orp===null?null:
+    orp > 600 ? {label:"⚠ Cloro presente", col:C.red, detail:"Agua NO apta para diálisis"} :
+    orp > 400 ? {label:"◉ Oxidante residual", col:C.amber, detail:"Verificar filtro de carbón"} :
+    orp > 200 ? {label:"✓ Sin cloro", col:C.green, detail:"Apto para diálisis"} :
+    {label:"⬇ ORP muy bajo", col:C.dim, detail:"Electrodo desconectado o solución reductora"};
+
+  return (
+    <div style={S.wrap}>
+      <div style={S.st(col)}>▸ ORP — Potencial Redox</div>
+      {on&&<button style={S.btn("r")} onClick={stop}>⏹ Detener</button>}
+
+      <div style={{...glass(col,0.06),borderRadius:10,padding:"10px 14px",
+        border:`1px solid rgba(${rgb(col)},0.2)`,marginBottom:4}}>
+        <div style={{fontFamily:MONO,fontSize:9,color:col,fontWeight:700,marginBottom:4}}>
+          MÓDULO SEM AquaPanel — Electrodo ORP de Platino
+        </div>
+        <div style={{fontFamily:MONO,fontSize:9,color:C.dim,lineHeight:1.7}}>
+          Referencia para diálisis: ORP post-carbón &lt; 400mV (sin cloro oxidante)
+        </div>
+      </div>
+
+      {orp!==null&&(
+        <div style={{...S.disp(orpStatus?.col||col),textAlign:"center",padding:"16px"}}>
+          <div style={{fontFamily:MONO,fontSize:64,fontWeight:700,
+            color:orpStatus?.col||col,lineHeight:1,textShadow:`0 0 24px ${orpStatus?.col||col}`}}>
+            {orp}
+          </div>
+          <div style={{fontFamily:MONO,fontSize:14,color:C.dim}}>mV</div>
+          <div style={{fontFamily:MONO,fontSize:11,color:orpStatus?.col,fontWeight:700,marginTop:6}}>
+            {orpStatus?.label}
+          </div>
+          <div style={{fontFamily:MONO,fontSize:9,color:C.dim,marginTop:2}}>
+            {orpStatus?.detail}
+          </div>
+        </div>
+      )}
+
+      {trend.length>2&&<TimeChart data={trend} col={col} unit=" mV" height={80}/>}
+
+      {/* Tabla de referencia */}
+      <div style={{...S.res(col)}}>
+        <div style={{fontFamily:MONO,fontSize:9,color:col,fontWeight:700,marginBottom:8}}>REFERENCIA ORP</div>
+        {[[">750","Cloro libre alto",C.red],
+          ["400-750","Oxidante presente",C.amber],
+          ["200-400","Sin cloro — OK diálisis",C.green],
+          ["<200","Sin oxidante / error",C.dim]].map(([r,l,c],i)=>(
+          <div key={i} style={{display:"flex",justifyContent:"space-between",
+            padding:"6px 0",borderBottom:`1px solid ${C.bord}`}}>
+            <span style={{fontFamily:MONO,fontSize:10,color:C.dim}}>{r} mV</span>
+            <span style={{fontFamily:MONO,fontSize:10,color:c,fontWeight:700}}>{l}</span>
+          </div>
+        ))}
+      </div>
+
+      <CalButton onOpen={()=>{}} active={false}/>
+      {err&&<div style={{color:C.red,fontFamily:MONO,fontSize:10}}>{err}</div>}
+      {!on&&<button style={S.btn("p",col)} onClick={start}>Conectar electrodo ORP</button>}
+      <div style={S.note}>Mismo circuito que pH. Solo cambia el electrodo: platino o Ag/AgCl para ORP.</div>
+    </div>
+  );
+}
+
+// ── pH por Jack (requiere SEM AquaPanel) ─────────────────────────────────────
+function ToolpHJack() {
+  return (
+    <ModuleGate modName="SEM AquaPanel" modId="aquapanel">
+      <ToolpHInner/>
+    </ModuleGate>
+  );
+}
+
+function ToolpHInner() {
+  const col = C.cyan;
+  const [on,setOn]=useState(false),[err,setErr]=useState(null);
+  const [ph,setPh]=useState(null),[trend,setTrend]=useState([]);
+  const [calPhase,setCalPhase]=useState("idle");
+  const [calBuf,setCalBuf]=useState([]);
+  const stRef=useRef(),anlRef=useRef(),rafRef=useRef();
+
+  const CAL_BUFFERS = [{ph:4.0,col:"#FF6B35"},{ph:7.0,col:"#4ECDC4"},{ph:10.0,col:"#9B59B6"}];
+
+  const start=async()=>{
+    try{
+      const s=await navigator.mediaDevices.getUserMedia({
+        audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:false}
+      });
+      stRef.current=s;
+      const ctx=new AudioContext(), src2=ctx.createMediaStreamSource(s);
+      const anl=ctx.createAnalyser(); anl.fftSize=8192; anl.smoothingTimeConstant=0.95;
+      src2.connect(anl); anlRef.current=anl;
+      setOn(true); setErr(null);
+      const td=new Float32Array(anl.fftSize);
+      const calData=getCal("ph_jack");
+      const process=()=>{
+        anl.getFloatTimeDomainData(td);
+        const avg=td.reduce((a,v)=>a+v,0)/td.length;
+        // Electrodo pH: 59.16 mV/pH a 25°C (pendiente de Nernst)
+        // Con amplificador x100: 5.916V/pH → mapear al rango de audio
+        const mV=avg*1000*(calData.factor||1);
+        const phVal=7+mV*(calData.slope||0.017); // calibración inicial
+        setPh(Math.max(0,Math.min(14,+phVal.toFixed(2))));
+        setTrend(h=>[...h.slice(-59),Math.max(0,Math.min(14,phVal))]);
+        rafRef.current=requestAnimationFrame(process);
+      };
+      rafRef.current=requestAnimationFrame(process);
+    }catch(e){setErr(e.message);}
+  };
+
+  const stop=()=>{
+    cancelAnimationFrame(rafRef.current);
+    stRef.current?.getTracks().forEach(t=>t.stop());
+    setOn(false);
+  };
+
+  useEffect(()=>()=>{cancelAnimationFrame(rafRef.current);stRef.current?.getTracks().forEach(t=>t.stop());},[]);
+
+  const phCol=ph===null?col:ph<6.5?C.amber:ph>8.5?C.violet:C.green;
+  const phStatus=ph===null?"":ph<6.5?"Ácido":ph>8.5?"Alcalino":"Neutro";
+
+  return (
+    <div style={S.wrap}>
+      <div style={S.st(col)}>▸ pH — Electrodo de Vidrio</div>
+      {on&&<button style={S.btn("r")} onClick={stop}>⏹ Detener</button>}
+
+      {ph!==null&&(
+        <div style={{...S.disp(phCol),textAlign:"center",padding:"20px 16px"}}>
+          <div style={{fontFamily:MONO,fontSize:72,fontWeight:700,color:phCol,
+            lineHeight:1,textShadow:`0 0 28px ${phCol}`}}>{ph}</div>
+          <div style={{fontFamily:MONO,fontSize:13,color:C.dim}}>pH</div>
+          <div style={{fontFamily:MONO,fontSize:12,color:phCol,fontWeight:700,marginTop:6}}>
+            {phStatus}
+          </div>
+        </div>
+      )}
+
+      {trend.length>2&&<TimeChart data={trend} col={col} unit=" pH" height={70}/>}
+
+      {/* Escala visual de pH */}
+      <div style={{borderRadius:8,overflow:"hidden",height:16,
+        background:"linear-gradient(to right,#FF0000,#FF7F00,#FFFF00,#00FF00,#00FFFF,#0000FF,#8B00FF)"}}>
+        {ph!==null&&(
+          <div style={{position:"relative",height:"100%"}}>
+            <div style={{position:"absolute",top:0,bottom:0,left:`${ph/14*100}%`,
+              width:3,background:"#fff",transform:"translateX(-50%)",
+              boxShadow:"0 0 6px rgba(255,255,255,0.8)"}}/>
+          </div>
+        )}
+      </div>
+      <div style={{display:"flex",justifyContent:"space-between",fontFamily:MONO,fontSize:8,color:C.dim}}>
+        {[0,2,4,6,7,8,10,12,14].map(v=><span key={v}>{v}</span>)}
+      </div>
+
+      {err&&<div style={{color:C.red,fontFamily:MONO,fontSize:10}}>{err}</div>}
+      {!on&&<button style={S.btn("p",col)} onClick={start}>Conectar electrodo pH</button>}
+      <div style={S.note}>
+        Requiere electrodo de vidrio + amplificador buffer alta impedancia (INA128 ganancia baja).
+        Calibrar con buffers pH 4, 7 y 10 antes de medir.
+      </div>
     </div>
   );
 }
@@ -3719,6 +3937,58 @@ function TimeChart({ data, col, unit="", height=80 }) {
     <canvas ref={cRef} width={640} height={height}
       style={{width:"100%",borderRadius:8,border:`1px solid rgba(${rgb(col)},0.2)`,
         background:"rgba(0,0,0,0.7)",display:"block"}}/>
+  );
+}
+
+
+// ── Sistema de módulos activables ────────────────────────────────────────────
+function getActiveMods() {
+  try { return JSON.parse(localStorage.getItem("sem_active_mods")||"{}"); } catch(_e){ return {}; }
+}
+function activateMod(id) {
+  const m = getActiveMods(); m[id]=true;
+  try { localStorage.setItem("sem_active_mods", JSON.stringify(m)); } catch(_e){}
+}
+function deactivateMod(id) {
+  const m = getActiveMods(); delete m[id];
+  try { localStorage.setItem("sem_active_mods", JSON.stringify(m)); } catch(_e){}
+}
+function isModActive(id) { return !!getActiveMods()[id]; }
+
+// Hook para chequear módulo activo
+function useModule(id) {
+  const [active, setActive] = useState(()=>isModActive(id));
+  const toggle = () => {
+    if(active){ deactivateMod(id); setActive(false); }
+    else { activateMod(id); setActive(true); }
+  };
+  return [active, toggle];
+}
+
+// Pantalla de "requiere módulo" cuando la tool está bloqueada
+function ModuleGate({ modName, modId, children }) {
+  const [active, toggle] = useModule(modId);
+  if(active) return children;
+  return (
+    <div style={S.wrap}>
+      <div style={{...glass(C.green,0.08),borderRadius:14,padding:20,
+        border:`1px solid rgba(${rgb(C.green)},0.3)`,textAlign:"center"}}>
+        <div style={{fontSize:48,marginBottom:12,filter:`drop-shadow(0 0 16px ${C.green})`}}>📦</div>
+        <div style={{fontFamily:MONO,fontSize:14,fontWeight:700,color:C.green,marginBottom:8}}>
+          {modName}
+        </div>
+        <div style={{fontFamily:MONO,fontSize:10,color:C.dim,lineHeight:1.8,marginBottom:16}}>
+          Esta herramienta requiere el módulo físico {modName}.
+          Si ya lo tenés, activalo para desbloquear las herramientas asociadas.
+        </div>
+        <button style={{...S.btn("p",C.green),maxWidth:280,margin:"0 auto"}} onClick={toggle}>
+          ✓ Tengo el módulo — Activar
+        </button>
+        <div style={{fontFamily:MONO,fontSize:9,color:C.dim,marginTop:12}}>
+          Módulos disponibles en la sección MÓDULOS
+        </div>
+      </div>
+    </div>
   );
 }
 
