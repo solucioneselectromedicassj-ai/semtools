@@ -450,70 +450,126 @@ function Onboarding({ onDone }) {
         {/* ── PASO 1 ─────────────────────────────────────────────────────── */}
         {step === 1 && (
           <>
-            <div style={{ ...glass(C.violet, 0.08), borderRadius:14, padding:18,
-                          border:`1px solid rgba(${rgb(C.violet)},0.25)` }}>
-              <div style={{ fontFamily:MONO, fontSize:11, fontWeight:700, color:C.violet, marginBottom:10 }}>
-                🤖 HERRAMIENTAS CON IA
+            <div style={{...glass(C.violet,0.08),borderRadius:14,padding:16,
+              border:`1px solid rgba(${rgb(C.violet)},0.25)`}}>
+              <div style={{fontFamily:MONO,fontSize:11,fontWeight:700,color:C.violet,marginBottom:8}}>
+                🤖 Herramientas con Inteligencia Artificial
               </div>
-              <div style={{ fontFamily:MONO, fontSize:10, color:C.dim, lineHeight:1.8 }}>
-                Resistencias, Integrados IC y Distancia usan Google Gemini para analizar fotos.
-                La key es gratis y queda solo en tu celular.
+              <div style={{fontFamily:MONO,fontSize:10,color:C.dim,lineHeight:1.8}}>
+                SEM Tools puede analizar fotos para identificar resistencias, integrados IC y medir distancias.
+                Para esto necesita conectarse a una IA — es como darle acceso a un asistente inteligente.{"\n\n"}
+                Necesitás una "API key" — es gratis y lleva menos de 2 minutos obtenerla.
               </div>
             </div>
 
-            {[
-              { n:"1", icon:"🌐", title:"Abrí Google AI Studio",
-                btn: <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer"
-                  style={{ ...S.btn("p",C.blue), display:"block", textDecoration:"none",
-                           textAlign:"center", fontFamily:MONO, fontSize:12, fontWeight:700 }}>
-                  Abrir Google AI Studio →
-                </a>,
-                desc:"Se abre en el navegador. Iniciá sesión con tu cuenta Google."
-              },
-              { n:"2", icon:"🔑", title:'Tocá "Create API key"',
-                desc:'Elegí "Default Gemini Project". Copiá todo el texto de la clave (AIzaSy... o AQ...).' },
-              { n:"3", icon:"📋", title:"Pegá tu key acá abajo",
-                desc:"Queda guardada solo en este celular. Nadie más la ve." },
-            ].map(({ n, icon, title, btn, desc }) => (
-              <div key={n} style={{ display:"flex", gap:14, alignItems:"flex-start" }}>
-                <div style={{ width:32, height:32, borderRadius:"50%", flexShrink:0,
-                              background:`rgba(${rgb(C.cyan)},0.15)`,
-                              border:`1px solid rgba(${rgb(C.cyan)},0.4)`,
-                              display:"flex", alignItems:"center", justifyContent:"center",
-                              fontFamily:MONO, fontSize:14, fontWeight:700, color:C.cyan }}>
-                  {n}
-                </div>
-                <div style={{ flex:1 }}>
-                  <div style={{ fontFamily:MONO, fontSize:11, fontWeight:700, color:C.text, marginBottom:4 }}>
-                    {icon} {title}
-                  </div>
-                  <div style={{ fontFamily:MONO, fontSize:10, color:C.dim, lineHeight:1.7, marginBottom:btn?10:0 }}>
-                    {desc}
-                  </div>
-                  {btn}
-                </div>
-              </div>
-            ))}
+            {/* Tabs Gemini / Claude */}
+            <div style={{display:"flex",gap:6}}>
+              {[
+                {id:"gemini",label:"Google Gemini",badge:"GRATIS",col:C.blue},
+                {id:"claude",label:"Claude (Anthropic)",badge:"DE PAGO",col:C.violet},
+              ].map(op=>(
+                <button key={op.id} style={{
+                  flex:1,border:`2px solid ${key.startsWith("sk-")?op.id==="claude"?op.col:"rgba(255,255,255,0.1)":op.id==="gemini"?op.col:"rgba(255,255,255,0.1)"}`,
+                  borderRadius:10,padding:"10px 6px",cursor:"pointer",textAlign:"center",
+                  background:((key.startsWith("sk-")&&op.id==="claude")||(!key.startsWith("sk-")&&op.id==="gemini"))
+                    ?`rgba(${rgb(op.col)},0.12)`:"rgba(255,255,255,0.03)",
+                }} onClick={()=>setKey(op.id==="gemini"?"":"sk-")}>
+                  <div style={{fontFamily:MONO,fontSize:10,fontWeight:700,color:op.col}}>{op.label}</div>
+                  <div style={{...S.pill(op.col),marginTop:4,display:"inline-block",fontSize:8}}>{op.badge}</div>
+                </button>
+              ))}
+            </div>
 
-            <input style={{ ...S.inp, fontSize:12 }}
-              placeholder="Pegá tu key acá (AIzaSy... o AQ...)"
-              value={key} onChange={e=>{ setKey(e.target.value); setErr(null); }}/>
-            {err && <div style={{ fontFamily:MONO, fontSize:10, color:C.red, lineHeight:1.6,
-                                   background:`rgba(${rgb(C.red)},0.08)`, borderRadius:8, padding:"8px 12px" }}>{err}</div>}
-            <button style={{ ...S.btn("p",C.green), opacity:testing?.7:1 }}
-              onClick={testing?null:testAndSave}>
-              {testing?"Verificando…":"✓ Guardar y continuar"}
-            </button>
-            <div style={{ textAlign:"center" }}>
-              <button style={{ border:"none", background:"none", color:C.dim,
-                               fontFamily:MONO, fontSize:10, cursor:"pointer", textDecoration:"underline" }}
+            {/* Guía Gemini */}
+            {!key.startsWith("sk-") && (
+              <div style={{display:"flex",flexDirection:"column",gap:12}}>
+                <div style={{fontFamily:MONO,fontSize:9,color:C.blue,fontWeight:700,letterSpacing:2}}>
+                  PASO A PASO — GOOGLE GEMINI (GRATIS)
+                </div>
+                {[
+                  {n:"1",title:"Abrí Google AI Studio",
+                   desc:"Tocá el botón. Se abre en tu navegador. Iniciá sesión con tu cuenta de Gmail (la misma que usás para YouTube, Maps, etc.)",
+                   btn:<a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer"
+                     style={{...S.btn("p",C.blue),display:"block",textDecoration:"none",textAlign:"center",fontFamily:MONO,fontSize:12,fontWeight:700}}>
+                     Abrir Google AI Studio →
+                   </a>},
+                  {n:"2",title:'Tocá "Create API key"',
+                   desc:'Buscá el botón azul grande que dice "Create API key". Tocalo.'},
+                  {n:"3",title:'Elegí el proyecto y creá la key',
+                   desc:'Dejá seleccionado "Default Gemini Project" y tocá "Create API key in existing project".'},
+                  {n:"4",title:"Copiá la key completa",
+                   desc:'Aparece un texto largo que empieza con AIza... o AQ... Tocá el ícono 📋 para copiarlo todo.'},
+                ].map(({n,title,desc,btn})=>(
+                  <div key={n} style={{display:"flex",gap:12,alignItems:"flex-start"}}>
+                    <div style={{width:28,height:28,borderRadius:"50%",flexShrink:0,
+                      background:`rgba(${rgb(C.blue)},0.15)`,border:`2px solid rgba(${rgb(C.blue)},0.5)`,
+                      display:"flex",alignItems:"center",justifyContent:"center",
+                      fontFamily:MONO,fontSize:13,fontWeight:700,color:C.blue}}>{n}</div>
+                    <div style={{flex:1}}>
+                      <div style={{fontFamily:MONO,fontSize:11,fontWeight:700,color:C.text,marginBottom:3}}>{title}</div>
+                      <div style={{fontFamily:MONO,fontSize:10,color:C.dim,lineHeight:1.7,marginBottom:btn?8:0}}>{desc}</div>
+                      {btn}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Guía Claude */}
+            {key.startsWith("sk-") && (
+              <div style={{display:"flex",flexDirection:"column",gap:12}}>
+                <div style={{fontFamily:MONO,fontSize:9,color:C.violet,fontWeight:700,letterSpacing:2}}>
+                  PASO A PASO — ANTHROPIC CLAUDE (DE PAGO)
+                </div>
+                {[
+                  {n:"1",title:"Abrí Anthropic Console",
+                   desc:"Necesitás cuenta en Anthropic. Si no tenés, registrate en anthropic.com (requiere tarjeta de crédito).",
+                   btn:<a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noreferrer"
+                     style={{...S.btn("p",C.violet),display:"block",textDecoration:"none",textAlign:"center",fontFamily:MONO,fontSize:12,fontWeight:700}}>
+                     Abrir Anthropic Console →
+                   </a>},
+                  {n:"2",title:'Tocá "Create Key"',
+                   desc:'En la sección "API Keys" tocá "Create Key". Ponele un nombre como "SEM Tools".'},
+                  {n:"3",title:"Copiá la key — solo se muestra una vez",
+                   desc:'La key empieza con sk-ant-api03-... Copiala toda ahora porque no se vuelve a mostrar.'},
+                ].map(({n,title,desc,btn})=>(
+                  <div key={n} style={{display:"flex",gap:12,alignItems:"flex-start"}}>
+                    <div style={{width:28,height:28,borderRadius:"50%",flexShrink:0,
+                      background:`rgba(${rgb(C.violet)},0.15)`,border:`2px solid rgba(${rgb(C.violet)},0.5)`,
+                      display:"flex",alignItems:"center",justifyContent:"center",
+                      fontFamily:MONO,fontSize:13,fontWeight:700,color:C.violet}}>{n}</div>
+                    <div style={{flex:1}}>
+                      <div style={{fontFamily:MONO,fontSize:11,fontWeight:700,color:C.text,marginBottom:3}}>{title}</div>
+                      <div style={{fontFamily:MONO,fontSize:10,color:C.dim,lineHeight:1.7,marginBottom:btn?8:0}}>{desc}</div>
+                      {btn}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Input */}
+            <div style={{display:"flex",flexDirection:"column",gap:8}}>
+              <input style={{...S.inp,fontSize:12}}
+                placeholder={key.startsWith("sk-")?"sk-ant-api03-...":"AIzaSy... o AQ.Ab8R..."}
+                value={key} onChange={e=>{setKey(e.target.value);setErr(null);}}/>
+              {err&&<div style={{fontFamily:MONO,fontSize:10,color:C.red,lineHeight:1.6,
+                background:`rgba(${rgb(C.red)},0.08)`,borderRadius:8,padding:"8px 12px"}}>{err}</div>}
+              <button style={{...S.btn("p",C.green),opacity:testing?.7:1}}
+                onClick={testing?null:testAndSave}>
+                {testing?"Verificando…":"✓ Guardar y continuar"}
+              </button>
+            </div>
+
+            <div style={{textAlign:"center",paddingBottom:8}}>
+              <button style={{border:"none",background:"none",color:C.dim,
+                fontFamily:MONO,fontSize:10,cursor:"pointer",textDecoration:"underline"}}
                 onClick={skipKey}>
                 Saltar — usar sin herramientas de IA
               </button>
             </div>
           </>
         )}
-
         {/* ── PASO 2 ─────────────────────────────────────────────────────── */}
         {step === 2 && (
           <>
