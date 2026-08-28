@@ -1433,6 +1433,16 @@ function ToolDecibeles() {
         </div>
       )}
       {/* Eventos */}
+      {/* Botón SIEMPRE VISIBLE — antes del historial */}
+      {on
+        ?<button style={S.btn("r")} onClick={stop}>⏹ Detener</button>
+        :<button style={S.btn("p",col)} onClick={start}>Activar micrófono</button>
+      }
+
+      {/* Gráfica temporal */}
+      {history.length>2&&<TimeChart data={history} col={col} unit=" dB" height={80}/>}
+
+
       {events.length>0&&(
         <div style={S.res(col)}>
           <div style={{fontFamily:MONO,fontSize:9,color:col,marginBottom:8,fontWeight:700}}>EVENTOS ≥ {thresh} dB</div>
@@ -1448,16 +1458,6 @@ function ToolDecibeles() {
         </div>
       )}
       {err&&<div style={{color:C.red,fontFamily:MONO,fontSize:11}}>{err}</div>}
-      {/* Botón SIEMPRE VISIBLE — antes del historial */}
-      {on
-        ?<button style={S.btn("r")} onClick={stop}>⏹ Detener</button>
-        :<button style={S.btn("p",col)} onClick={start}>Activar micrófono</button>
-      }
-
-      {/* Gráfica temporal */}
-      {history.length>2&&<TimeChart data={history} col={col} unit=" dB" height={80}/>}
-
-
       {(()=>{
         const [calOpen, setCalOpen]  = React.useState(false);
         const [phase,   setPhase]    = React.useState("intro");
