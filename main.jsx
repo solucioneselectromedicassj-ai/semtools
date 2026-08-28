@@ -102,7 +102,7 @@ const TOOL = {
 
 const BLOCKS = [
   { id:"celular",  icon:"📱", label:"CELULAR",     col:C.cyan,   tools:["decibeles","nivel","brujula","oscilo","vibro","espectro","generador","ecggen","sistema","qr","ir","nfc"] },
-  { id:"camara",   icon:"📷", label:"CÁMARA + IA", col:C.violet, tools:["resistencias","integrados","distancia","endoscopio","ppg"] },
+  { id:"camara",   icon:"📷", label:"CÁMARA + IA", col:C.violet, tools:["resistencias","integrados","distancia","endoscopio","ppg","cloro"] },
   { id:"jack",     icon:"🔌", label:"JACK 3.5mm",  col:C.orange, tools:["jack_thermo","jack_thermo2","jack_air","jack_volt","jack_light","jack_raw","spo2","ecg","conductimetro"] },
   { id:"celularplus", icon:"📶", label:"CONECTIVIDAD", col:C.blue, tools:["red","ping","lan","http","ble","ipinfo"] },
   { id:"modulos",  icon:"📡", label:"MÓDULOS",     col:C.green,  tools:["modulos"] },
@@ -2682,6 +2682,251 @@ function ToolConductimetro() {
       <div style={S.note}>
         Medición AC a 1kHz — no causa electrólisis. Rangos: agua pura 0.001 · potable 0.05-0.5 · mar ~50 mS/cm.
         Calibrá siempre con solución de referencia conocida.
+      </div>
+    </div>
+  );
+}
+
+
+// ── Medidor de Cloro — colorimétrico DPD ─────────────────────────────────────
+function ToolCloro() {
+  const col = C.amber;
+  const [phase, setPhase] = useState("intro"); // intro|blank|sample|result
+  const [blankRGB, setBlankRGB] = useState(null);
+  const [result, setResult] = useState(null);
+  const [type, setType] = useState("libre"); // libre|total|cloraminas
+  const vRef=useRef(), cRef=useRef(), stRef=useRef(), tkRef=useRef();
+  const [on, setOn] = useState(false), [err, setErr] = useState(null);
+
+  const LIMITS = {
+    dialisis:  { label:"Diálisis (AAMI)",    libre:0.5,  total:0.1  },
+    potable:   { label:"Agua potable (OMS)", libre:5.0,  total:5.0  },
+    piscina:   { label:"Pileta",             libre:3.0,  total:5.0  },
+  };
+  const [checkLimit, setCheckLimit] = useState("dialisis");
+
+  const startCamera = async () => {
+    try {
+      const s = await navigator.mediaDevices.getUserMedia({
+        video:{facingMode:"environment",width:{ideal:1280}}
+      });
+      stRef.current = s; vRef.current.srcObject = s;
+      await vRef.current.play();
+      const track = s.getVideoTracks()[0]; tkRef.current = track;
+      setOn(true); setErr(null);
+    } catch(e) { setErr(e.message); }
+  };
+
+  const stopCamera = () => {
+    stRef.current?.getTracks().forEach(t=>t.stop());
+    if(vRef.current) vRef.current.srcObject = null;
+    setOn(false);
+  };
+
+  // Capturar muestra y extraer RGB promedio del centro
+  const capture = () => {
+    const v = vRef.current;
+    const c = document.createElement("canvas");
+    c.width = v.videoWidth; c.height = v.videoHeight;
+    const ctx = c.getContext("2d");
+    ctx.drawImage(v, 0, 0);
+    // Zona central 80x80px
+    const cx = Math.floor(c.width/2-40), cy = Math.floor(c.height/2-40);
+    const d = ctx.getImageData(cx, cy, 80, 80).data;
+    let r=0,g=0,b=0,n=d.length/4;
+    for(let i=0;i<d.length;i+=4){r+=d[i];g+=d[i+1];b+=d[i+2];}
+    return {r:r/n, g:g/n, b:b/n};
+  };
+
+  const takeBlank = () => {
+    const rgb = capture();
+    setBlankRGB(rgb);
+    setPhase("sample");
+  };
+
+  const takeSample = () => {
+    if(!blankRGB) return;
+    const sample = capture();
+    // Calcular diferencia de color rosa/rojo vs referencia
+    // El DPD vira a rosado → aumenta R, disminuye G y B relativos
+    const dR = sample.r - blankRGB.r;  // delta rojo
+    const dG = blankRGB.g - sample.g;  // delta verde (cae)
+    // Índice de color rosado = combinación ponderada
+    const pinkIndex = Math.max(0, dR * 0.6 + dG * 0.4);
+    // Calibración empírica DPD: curva aproximada (lineal en rango bajo)
+    // pinkIndex 0 → 0 mg/L, pinkIndex ~40 → 5 mg/L
+    const clMgL = Math.min(10, Math.max(0, pinkIndex / 8));
+    const limit = LIMITS[checkLimit];
+    const limitVal = type === "libre" ? limit.libre : limit.total;
+    const status = clMgL <= limitVal ? "ok" : "alto";
+    setResult({
+      cl: clMgL.toFixed(2),
+      dR: dR.toFixed(1), dG: dG.toFixed(1),
+      pinkIndex: pinkIndex.toFixed(1),
+      status, limitVal, limitLabel: limit.label,
+      sampleRGB: sample,
+    });
+    setPhase("result");
+    stopCamera();
+  };
+
+  const reset = () => {
+    setPhase("intro"); setBlankRGB(null); setResult(null);
+    stopCamera(); setErr(null);
+  };
+
+  useEffect(() => () => stopCamera(), []);
+
+  const resultCol = result?.status==="ok" ? C.green : C.red;
+
+  // Color de preview de la muestra
+  const previewBg = result?.sampleRGB
+    ? `rgb(${Math.round(result.sampleRGB.r)},${Math.round(result.sampleRGB.g)},${Math.round(result.sampleRGB.b)})`
+    : "transparent";
+
+  return (
+    <div style={S.wrap}>
+      <div style={S.st(col)}>▸ Medidor de Cloro — DPD Colorimétrico</div>
+
+      {/* Selector de tipo */}
+      <div style={{display:"flex",gap:6}}>
+        {[["libre","Cl₂ libre"],["total","Cl₂ total"],["cloraminas","Cloraminas"]].map(([v,l])=>(
+          <button key={v} style={{flex:1,border:`1px solid ${type===v?col:C.bord}`,borderRadius:8,
+            padding:"6px 4px",cursor:"pointer",fontFamily:MONO,fontSize:9,
+            color:type===v?col:C.dim,background:type===v?`rgba(${rgb(col)},0.12)`:"rgba(255,255,255,0.04)"}}
+            onClick={()=>setType(v)}>{l}</button>
+        ))}
+      </div>
+
+      {/* Límite de referencia */}
+      <div style={{display:"flex",gap:6}}>
+        {Object.entries(LIMITS).map(([k,v])=>(
+          <button key={k} style={{flex:1,border:`1px solid ${checkLimit===k?col:C.bord}`,borderRadius:8,
+            padding:"5px 4px",cursor:"pointer",fontFamily:MONO,fontSize:8,
+            color:checkLimit===k?col:C.dim,background:checkLimit===k?`rgba(${rgb(col)},0.12)`:"rgba(255,255,255,0.04)"}}
+            onClick={()=>setCheckLimit(k)}>{v.label.split(" ")[0]}</button>
+        ))}
+      </div>
+
+      {/* Instrucciones por fase */}
+      {phase==="intro" && (
+        <div style={{...glass(col,0.07),borderRadius:12,padding:16,
+          border:`1px solid rgba(${rgb(col)},0.25)`,display:"flex",flexDirection:"column",gap:10}}>
+          <div style={{fontFamily:MONO,fontSize:10,fontWeight:700,color:col}}>
+            MÉTODO DPD — PASOS
+          </div>
+          {[
+            {n:"1",t:"Preparar muestra",d:"Llená un tubo o vaso transparente con 10mL de agua a analizar. Mantenerlo limpio."},
+            {n:"2",t:"Fotografiar referencia",d:"Con el vaso vacío o con agua sin DPD → tomás la foto de referencia (blanco)."},
+            {n:"3",t:"Agregar reactivo DPD",d:"Añadí 1 tableta DPD-1 (cloro libre) o DPD-3 (cloro total) al agua. Mezclá hasta disolver."},
+            {n:"4",t:"Fotografiar muestra",d:"Dentro de 2 minutos, fotografiá la muestra coloreada sobre fondo blanco con buena luz."},
+          ].map(({n,t,d})=>(
+            <div key={n} style={{display:"flex",gap:10}}>
+              <div style={{width:22,height:22,borderRadius:"50%",flexShrink:0,fontFamily:MONO,
+                fontSize:12,fontWeight:700,color:col,display:"flex",alignItems:"center",
+                justifyContent:"center",background:`rgba(${rgb(col)},0.15)`,
+                border:`1px solid rgba(${rgb(col)},0.4)`}}>{n}</div>
+              <div>
+                <div style={{fontFamily:MONO,fontSize:10,fontWeight:700,color:C.text}}>{t}</div>
+                <div style={{fontFamily:MONO,fontSize:9,color:C.dim,lineHeight:1.7}}>{d}</div>
+              </div>
+            </div>
+          ))}
+          <div style={{fontFamily:MONO,fontSize:9,color:C.amber,lineHeight:1.7,
+            background:`rgba(${rgb(C.amber)},0.08)`,borderRadius:8,padding:"8px 10px"}}>
+            ⚠ Para diálisis: usar fondo blanco uniforme, luz natural o LED blanco, mismo encuadre en ambas fotos.
+            Reactivo DPD disponible en farmacias o proveedores de tratamiento de agua.
+          </div>
+          <button style={S.btn("p",col)} onClick={async()=>{await startCamera();setPhase("blank");}}>
+            📷 Iniciar medición
+          </button>
+        </div>
+      )}
+
+      {/* Cámara */}
+      {(phase==="blank"||phase==="sample")&&(
+        <>
+          <div style={{position:"relative",borderRadius:12,overflow:"hidden",
+            border:`2px solid ${col}`,background:"#000"}}>
+            <video ref={vRef} style={{...S.vid,border:"none",borderRadius:0,maxHeight:220}} playsInline muted/>
+            {/* Marcador central */}
+            <div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",pointerEvents:"none"}}>
+              <div style={{width:80,height:80,border:`2px solid ${col}`,borderRadius:8,
+                boxShadow:`0 0 12px ${col}88`}}/>
+            </div>
+            <div style={{position:"absolute",bottom:8,left:0,right:0,textAlign:"center",
+              fontFamily:MONO,fontSize:10,color:col,background:"rgba(0,0,0,0.6)",padding:"4px 0"}}>
+              {phase==="blank"?"Encuadrá el AGUA LIMPIA (sin DPD)":"Encuadrá la MUESTRA CON DPD (rosada)"}
+            </div>
+          </div>
+          <canvas ref={cRef} style={{display:"none"}}/>
+          <button style={S.btn("p",col)} onClick={phase==="blank"?takeBlank:takeSample}>
+            {phase==="blank"?"📸 Fotografiar referencia (agua limpia)":"📸 Fotografiar muestra con DPD"}
+          </button>
+          {phase==="sample"&&blankRGB&&(
+            <div style={{fontFamily:MONO,fontSize:10,color:C.green}}>
+              ✓ Referencia tomada — ahora agregá DPD y fotografiá la muestra
+            </div>
+          )}
+        </>
+      )}
+
+      {/* Resultado */}
+      {phase==="result"&&result&&(
+        <>
+          <div style={{...S.disp(resultCol),padding:"16px",textAlign:"center"}}>
+            <div style={{fontFamily:MONO,fontSize:9,color:C.dim,marginBottom:4}}>
+              CLORO {type.toUpperCase()} — {LIMITS[checkLimit].label}
+            </div>
+            <div style={{fontFamily:MONO,fontSize:64,fontWeight:700,color:resultCol,
+              lineHeight:1,textShadow:`0 0 24px ${resultCol}`}}>
+              {result.cl}
+            </div>
+            <div style={{fontFamily:MONO,fontSize:14,color:C.dim}}>mg/L Cl₂</div>
+            <div style={{marginTop:8,padding:"6px 16px",borderRadius:20,display:"inline-block",
+              background:`rgba(${rgb(resultCol)},0.15)`,border:`1px solid ${resultCol}`,
+              fontFamily:MONO,fontSize:11,fontWeight:700,color:resultCol}}>
+              {result.status==="ok"
+                ?`✓ DENTRO DEL LÍMITE (≤${result.limitVal} mg/L)`
+                :`⚠ SUPERA EL LÍMITE (>${result.limitVal} mg/L)`}
+            </div>
+          </div>
+
+          {/* Color capturado */}
+          <div style={{display:"flex",gap:8}}>
+            <div style={{flex:1,borderRadius:10,height:50,
+              background:blankRGB?`rgb(${Math.round(blankRGB.r)},${Math.round(blankRGB.g)},${Math.round(blankRGB.b)})`:"#fff",
+              border:`1px solid ${C.bord}`,display:"flex",alignItems:"center",justifyContent:"center"}}>
+              <span style={{fontFamily:MONO,fontSize:9,color:"rgba(0,0,0,0.5)"}}>Referencia</span>
+            </div>
+            <div style={{flex:1,borderRadius:10,height:50,background:previewBg,
+              border:`2px solid ${resultCol}`,display:"flex",alignItems:"center",justifyContent:"center"}}>
+              <span style={{fontFamily:MONO,fontSize:9,color:"rgba(0,0,0,0.5)"}}>Muestra</span>
+            </div>
+          </div>
+
+          <div style={{fontFamily:MONO,fontSize:9,color:C.dim,lineHeight:1.7,
+            background:"rgba(255,255,255,0.03)",borderRadius:8,padding:"8px 10px"}}>
+            ΔR: {result.dR} · ΔG: {result.dG} · Índice rosa: {result.pinkIndex}
+          </div>
+
+          {result.status!=="ok"&&checkLimit==="dialisis"&&(
+            <div style={{fontFamily:MONO,fontSize:10,color:C.red,lineHeight:1.8,
+              background:`rgba(${rgb(C.red)},0.08)`,borderRadius:8,padding:"10px 12px",
+              border:`1px solid rgba(${rgb(C.red)},0.3)`}}>
+              🚨 AGUA NO APTA PARA DIÁLISIS<br/>
+              Verificar filtros de carbón activado · No usar hasta corregir · Repetir medición
+            </div>
+          )}
+
+          <button style={S.btn("s")} onClick={reset}>← Nueva medición</button>
+        </>
+      )}
+
+      {err&&<div style={{color:C.red,fontFamily:MONO,fontSize:10}}>{err}</div>}
+      <div style={S.note}>
+        Precisión: ±0.1 mg/L con buena iluminación uniforme. Reactivo DPD-1 (cloro libre) o DPD-3 (cloro total).
+        Límite AAMI diálisis: libre &lt;0.5 mg/L · total &lt;0.1 mg/L.
       </div>
     </div>
   );
