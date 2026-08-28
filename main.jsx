@@ -4483,6 +4483,42 @@ const MODULE_CATALOG = [
     price:"",
     specs:["2 sondas NTC calibradas","Rango: -40°C a +125°C","Precisión: ±0.5°C","Cable 1m c/u · Conector TRRS"],
   },
+  {
+    id:"aquapanel", icon:"🧪", name:"SEM AquaPanel",
+    col:C.cyan, status:"dev",
+    desc:"pH + ORP + Conductividad en un módulo. Panel completo de calidad de agua para diálisis. Activa las herramientas avanzadas en la app.",
+    iface:"Jack 3.5mm (TRRS)", price:"",
+    specs:["Electrodo pH vidrio","Electrodo ORP platino","Celda conductividad K=1.0","Amplificador INA128","Compatible norma AAMI diálisis"],
+    moduleId:"aquapanel",
+  },
+  {
+    id:"ecgmod", icon:"📟", name:"SEM ECG-5",
+    col:C.green, status:"dev",
+    desc:"ECG de 5 derivaciones por jack estéreo. INA128 + filtros + electrodos. Compatible con el generador y lector ECG de la app.",
+    iface:"Jack 3.5mm estéreo", price:"",
+    specs:["5 derivaciones: I, II, III, aVR, V1","INA128 · CMRR >100dB","Filtros 0.5–150Hz","Cable de paciente 3 electrodos"],
+  },
+  {
+    id:"condmod", icon:"💧", name:"SEM ConductPro",
+    col:C.blue, status:"dev",
+    desc:"Celda de conductividad 0.001–100 mS/cm. Electrodos de acero inox 316L. Para agua de diálisis, soluciones biológicas y control de calidad.",
+    iface:"Jack 3.5mm (TRRS)", price:"",
+    specs:["Rango: 0.001–100 mS/cm","Electrodos inox 316L","Celda K=1.0 cm⁻¹","Cable 1m TRRS"],
+  },
+  {
+    id:"cloromod", icon:"🟡", name:"SEM CloroCheck",
+    col:C.amber, status:"dev",
+    desc:"Kit DPD estandarizado para medir cloro con la cámara del celular. Protocolo AAMI para diálisis incluido.",
+    iface:"Cámara", price:"",
+    specs:["100 tabletas DPD-1","50 tabletas DPD-3","Tubo 10mL calibrado","Tarjeta de blanco","Protocolo AAMI"],
+  },
+  {
+    id:"spo2mod", icon:"❤️", name:"SEM SpO2",
+    col:C.red, status:"dev",
+    desc:"Sensor de saturación O₂ por jack estéreo. LED 660nm + IR 940nm + fotodiodo + clip para dedo. SpO2% y BPM simultáneos.",
+    iface:"Jack 3.5mm estéreo", price:"",
+    specs:["LED rojo 660nm + IR 940nm","Fotodiodo BPW34 x2","Amplificador TIA LM358","Clip dedo 3D","Rango 70–100% SpO2"],
+  },
 ];
 
 const STATUS_LABEL = {
