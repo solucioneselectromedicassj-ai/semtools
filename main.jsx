@@ -974,8 +974,8 @@ function JackManualPanel() {
 
 // ── Sensores Jack — herramientas individuales ────────────────────────────────
 const JACK_MODS = {
-  jack_thermo:  { label:"Temperatura",   unit:"°C",  icon:"🌡",  col:"#FF3355", convert:v=>v*100-40,           stereo:false },
-  jack_thermo2: { label:"Dual Temp",     unit:"°C",  icon:"🌡🌡",col:"#B06EFF", convert:v=>v*100-40,           stereo:true  },
+  jack_thermo:  { label:"Temperatura",   unit:"°C",  icon:"🌡",  col:"#FF3355", convert:v=>{ const c=getCal('thermo'); return (v*100-40+c.offset)*c.factor; }, stereo:false },
+  jack_thermo2: { label:"Dual Temp",     unit:"°C",  icon:"🌡🌡",col:"#B06EFF", convert:v=>{ const c=getCal('thermo'); return (v*100-40+c.offset)*c.factor; }, stereo:true  },
   jack_air:     { label:"Flujo de aire", unit:"m/s", icon:"💨",  col:"#4D9EFF", convert:v=>Math.sqrt(Math.max(0,v)*8), stereo:false },
   jack_volt:    { label:"Voltaje CC",    unit:"V",   icon:"⚡",  col:"#FFB830", convert:v=>v*30,               stereo:false },
   jack_light:   { label:"Luminosidad",   unit:"lux", icon:"☀️",  col:"#B06EFF", convert:v=>Math.pow(Math.max(0,v)*10,2.5), stereo:false },
@@ -1381,6 +1381,37 @@ function ToolNivel() {
       </div>
 
       {on&&hasData&&<div style={S.tag(flat)}>{flat?"✓  NIVELADO  ±1.5°":"⊘  FUERA DE NIVEL"}</div>}
+
+      {/* Calibración del nivel */}
+      {(() => {
+        const [calOpen, setCalOpen] = React.useState(false);
+        const cal = getCal("nivel");
+        const isCalibrated = cal.bOffset !== 0 || cal.gOffset !== 0;
+        return (
+          <>
+            <CalButton onOpen={()=>setCalOpen(o=>!o)} active={isCalibrated}/>
+            {calOpen && (
+              <CalPanel title="NIVEL" onClose={()=>setCalOpen(false)}
+                onReset={()=>{ resetCal("nivel"); setCalOpen(false); }}>
+                <div style={{fontFamily:MONO,fontSize:10,color:C.dim,lineHeight:1.8,marginBottom:12}}>
+                  Apoyá el celular sobre una superficie plana de referencia (mesa, regla metálica).
+                  Cuando esté quieto, tocá "Tomar referencia".
+                </div>
+                <div style={{fontFamily:MONO,fontSize:10,color:C.dim,marginBottom:8}}>
+                  Valor actual: lateral {gx.toFixed(2)}° · inclinación {gy.toFixed(2)}°
+                </div>
+                <button style={{...S.btn("p",C.amber)}} onClick={()=>{
+                  saveCal("nivel", { bOffset: -gy, gOffset: -gx });
+                  setCalOpen(false);
+                }}>
+                  📐 Tomar referencia plana (offset actual)
+                </button>
+              </CalPanel>
+            )}
+          </>
+        );
+      })()}
+
       {err&&<div style={{color:C.amber,fontFamily:MONO,fontSize:10,lineHeight:1.6}}>{err}</div>}
       {typeof DeviceMotionEvent?.requestPermission==="function" && !on && (
         <button style={S.btn("p",col)} onClick={start}>Activar nivel</button>
@@ -2556,6 +2587,75 @@ function detectBrand() {
   return { brand, model, os, osVer, ui, hasJackGuess, tips: TIPS[ui]||TIPS.stock };
 }
 
+
+// ── Sistema de calibración ────────────────────────────────────────────────────
+const CAL_DEFAULTS = {
+  nivel:     { bOffset:0, gOffset:0 },          // offset acelerómetro
+  decibeles: { offset:0 },                       // ±dB offset
+  thermo:    { offset:0, factor:1 },             // offset °C + factor escala
+  volt:      { factor:1 },                       // factor divisor resistivo
+  air:       { offset:0 },                       // offset m/s en reposo
+};
+
+function getCal(key) {
+  try {
+    const s = localStorage.getItem("sem_cal_" + key);
+    return s ? { ...CAL_DEFAULTS[key], ...JSON.parse(s) } : { ...CAL_DEFAULTS[key] };
+  } catch(_e) { return { ...CAL_DEFAULTS[key] }; }
+}
+
+function saveCal(key, val) {
+  try { localStorage.setItem("sem_cal_" + key, JSON.stringify(val)); } catch(_e) {}
+}
+
+function resetCal(key) {
+  try { localStorage.removeItem("sem_cal_" + key); } catch(_e) {}
+}
+
+function CalButton({ onOpen, active }) {
+  return (
+    <button style={{
+      border:`1px solid ${active ? C.amber : C.bord}`,
+      borderRadius:8, padding:"5px 12px", cursor:"pointer",
+      background: active ? `rgba(${rgb(C.amber)},0.12)` : "rgba(255,255,255,0.04)",
+      fontFamily:MONO, fontSize:10,
+      color: active ? C.amber : C.dim,
+      display:"flex", alignItems:"center", gap:6,
+    }} onClick={onOpen}>
+      ⚙ {active ? "Calibrado ✓" : "Calibrar"}
+    </button>
+  );
+}
+
+function CalPanel({ title, children, onReset, onClose }) {
+  return (
+    <div style={{ ...glass(C.amber,0.08), borderRadius:14, padding:"16px",
+                  border:`1px solid rgba(${rgb(C.amber)},0.35)`,
+                  boxShadow:`0 0 20px rgba(${rgb(C.amber)},0.1)` }}>
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
+        <div style={{ fontFamily:MONO, fontSize:10, fontWeight:700, color:C.amber }}>
+          ⚙ CALIBRACIÓN — {title}
+        </div>
+        <button style={{ border:"none", background:"none", color:C.dim,
+                         fontFamily:MONO, fontSize:11, cursor:"pointer" }}
+          onClick={onClose}>✕</button>
+      </div>
+      {children}
+      <div style={{ display:"flex", gap:8, marginTop:12 }}>
+        <button style={{ ...S.btn("s"), flex:1, fontSize:10 }} onClick={onReset}>
+          Resetear calibración
+        </button>
+        <button style={{ ...S.btn("p",C.amber), flex:1, fontSize:10 }} onClick={onClose}>
+          Cerrar
+        </button>
+      </div>
+      <div style={{ fontFamily:MONO, fontSize:9, color:C.dim, marginTop:8, lineHeight:1.6 }}>
+        Los valores de calibración se guardan en este celular.
+      </div>
+    </div>
+  );
+}
+
 // ── Sistema / Optimización ────────────────────────────────────────────────────
 function ToolSistema() {
   const col = C.cyan;
@@ -2819,6 +2919,41 @@ function ToolSistema() {
       />
 
       {/* Tips por marca del sistema */}
+      {/* Gestión de calibraciones */}
+      <div style={{...glass(C.amber,0.06),borderRadius:12,padding:"14px 16px",
+        border:`1px solid rgba(${rgb(C.amber)},0.2)`}}>
+        <div style={{fontFamily:MONO,fontSize:9,color:C.amber,fontWeight:700,letterSpacing:2,marginBottom:10}}>
+          ⚙ CALIBRACIONES GUARDADAS
+        </div>
+        {["nivel","decibeles","thermo","volt","air"].map(k=>{
+          const cal = getCal(k);
+          const def = CAL_DEFAULTS[k];
+          const isDiff = JSON.stringify(cal)!==JSON.stringify(def);
+          return (
+            <div key={k} style={{display:"flex",justifyContent:"space-between",alignItems:"center",
+              padding:"7px 0",borderBottom:`1px solid ${C.bord}`}}>
+              <div>
+                <span style={{fontFamily:MONO,fontSize:11,color:isDiff?C.amber:C.dim,fontWeight:isDiff?700:400}}>
+                  {k.charAt(0).toUpperCase()+k.slice(1)}
+                </span>
+                {isDiff&&<span style={{fontFamily:MONO,fontSize:9,color:C.dim,marginLeft:8}}>
+                  {JSON.stringify(cal).replace(/[{}"]/g,"").slice(0,30)}
+                </span>}
+              </div>
+              {isDiff
+                ? <button style={{...S.btn("s"),width:"auto",padding:"4px 10px",fontSize:10,color:C.red}}
+                    onClick={()=>resetCal(k)}>Reset</button>
+                : <span style={{fontFamily:MONO,fontSize:9,color:C.dim}}>Sin calibrar</span>
+              }
+            </div>
+          );
+        })}
+        <button style={{...S.btn("s"),marginTop:10,fontSize:10}}
+          onClick={()=>["nivel","decibeles","thermo","volt","air"].forEach(k=>resetCal(k))}>
+          Resetear todas las calibraciones
+        </button>
+      </div>
+
       {(() => {
         const b = detectBrand();
         return b.tips?.length > 0 ? (
