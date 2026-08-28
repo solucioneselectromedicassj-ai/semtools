@@ -1448,9 +1448,9 @@ function ToolDecibeles() {
         </div>
       )}
       {err&&<div style={{color:C.red,fontFamily:MONO,fontSize:11}}>{err}</div>}
-      {/* Botón siempre visible arriba del historial */}
+      {/* Botón SIEMPRE VISIBLE — antes del historial */}
       {on
-        ?<button style={{...S.btn("r"),position:"sticky",top:0,zIndex:10}} onClick={stop}>⏹ Detener</button>
+        ?<button style={S.btn("r")} onClick={stop}>⏹ Detener</button>
         :<button style={S.btn("p",col)} onClick={start}>Activar micrófono</button>
       }
 
@@ -1458,8 +1458,6 @@ function ToolDecibeles() {
       {history.length>2&&<TimeChart data={history} col={col} unit=" dB" height={80}/>}
 
 
-
-      {/* Calibración por silencio */}
       {(()=>{
         const [calOpen, setCalOpen]  = React.useState(false);
         const [phase,   setPhase]    = React.useState("intro");
@@ -6039,6 +6037,7 @@ function App() {
 
   // Exponer función de rediagnóstico globalmente (accesible desde ToolSistema)
   useEffect(()=>{
+    window.__semGoTo = (toolId) => { setTool(toolId); };
     window.__semRediagnose = () => {
       try{ localStorage.removeItem("sem_caps"); }catch(_e){}
       setCaps(null);
