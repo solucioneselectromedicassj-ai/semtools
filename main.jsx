@@ -3390,10 +3390,92 @@ function ToolUSBProbe() {
         : <button style={S.btn("r")} onClick={disconnect}>⏹ Desconectar</button>
       }
 
+      {/* Sección alternativa: leer archivos del dispositivo montado */}
+      <div style={{...glass(C.violet,0.07),borderRadius:12,padding:"14px 16px",
+        border:`1px solid rgba(${rgb(C.violet)},0.25)`}}>
+        <div style={{fontFamily:MONO,fontSize:9,color:C.violet,fontWeight:700,
+          letterSpacing:2,marginBottom:8}}>ALTERNATIVA — LEER ARCHIVOS DEL DISPOSITIVO</div>
+        <div style={{fontFamily:MONO,fontSize:10,color:C.dim,lineHeight:1.8,marginBottom:10}}>
+          El CONTEC RS01 se monta como pendrive en Windows. Abrí el Explorador de archivos
+          y fijate si aparece una unidad nueva. Si sí, usá este botón para leer los datos grabados:
+        </div>
+        {(()=>{
+          const [fileData,setFileData]=useState(null);
+          const [fileName,setFileName]=useState(null);
+          const [parsedSpo2,setParsedSpo2]=useState([]);
+
+          const readFile=async()=>{
+            try{
+              const [fh]=await window.showOpenFilePicker({
+                types:[
+                  {description:"CONTEC data files",accept:{"application/octet-stream":[".spo",".dat",".bin",".db",".rec"]}},
+                  {description:"All files",accept:{"*/*":[".*"]}},
+                ],
+                multiple:false
+              });
+              const file=await fh.getFile();
+              setFileName(file.name);
+              const buf=await file.arrayBuffer();
+              const bytes=new Uint8Array(buf);
+              setFileData({
+                size:file.size,
+                hex:Array.from(bytes.slice(0,128)).map(b=>b.toString(16).padStart(2,"0").toUpperCase()).join(" "),
+                ascii:Array.from(bytes.slice(0,64)).map(b=>b>=32&&b<127?String.fromCharCode(b):"·").join(""),
+              });
+              // Intentar parsear SpO2
+              const parsed=[];
+              for(let i=0;i<bytes.length-3;i++){
+                if(bytes[i]>=70&&bytes[i]<=100&&bytes[i+1]>=30&&bytes[i+1]<=220){
+                  parsed.push({spo2:bytes[i],pr:bytes[i+1],offset:i});
+                  i+=2;
+                }
+              }
+              setParsedSpo2(parsed.slice(0,20));
+            }catch(e){
+              if(e.name!=="AbortError") alert("Error: "+e.message);
+            }
+          };
+
+          return (
+            <>
+              <button style={S.btn("p",C.violet)} onClick={readFile}>
+                📂 Abrir archivo del CONTEC RS01
+              </button>
+              {fileName&&(
+                <div style={{marginTop:10}}>
+                  <div style={{fontFamily:MONO,fontSize:10,color:C.violet,fontWeight:700,marginBottom:4}}>
+                    {fileName} — {fileData?.size} bytes
+                  </div>
+                  <div style={{fontFamily:MONO,fontSize:8,color:C.dim,lineHeight:1.6,
+                    wordBreak:"break-all",background:"rgba(0,0,0,0.4)",borderRadius:6,padding:"8px"}}>
+                    HEX: {fileData?.hex}
+                  </div>
+                  <div style={{fontFamily:MONO,fontSize:8,color:C.dim,marginTop:4}}>
+                    ASCII: {fileData?.ascii}
+                  </div>
+                  {parsedSpo2.length>0&&(
+                    <div style={{marginTop:8}}>
+                      <div style={{fontFamily:MONO,fontSize:9,color:C.green,fontWeight:700}}>
+                        Posibles lecturas SpO2 detectadas:
+                      </div>
+                      {parsedSpo2.map((r,i)=>(
+                        <div key={i} style={{fontFamily:MONO,fontSize:9,color:C.dim}}>
+                          offset 0x{r.offset.toString(16)}: SpO2={r.spo2}% PR={r.pr}bpm
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </>
+          );
+        })()}
+      </div>
+
       <div style={S.note}>
-        Conectá cualquier dispositivo USB-C: saturómetros, monitores, analizadores.
-        Los paquetes crudos permiten identificar el protocolo para desarrollar el módulo definitivo.
-        VendorID + ProductID quedan registrados para el diseño del módulo SEM.
+        CONTEC RS01 — VID:0x28E9 PID:0x01F3 — USB Mass Storage (cls 8 sub 6).
+        WebUSB no puede acceder a Mass Storage por seguridad del browser.
+        Los datos se leen desde los archivos grabados en el dispositivo.
       </div>
     </div>
   );
