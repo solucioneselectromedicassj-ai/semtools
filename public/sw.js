@@ -1,4 +1,4 @@
-const CACHE = 'sem-tools-v9';
+const CACHE = 'sem-tools-v10';
 const PRECACHE = ['/', '/manifest.json'];
 
 self.addEventListener('install', e => {
