@@ -3176,35 +3176,72 @@ function ToolUSBProbe() {
         speed:   dev.usbVersionMajor + "." + dev.usbVersionMinor,
       });
 
-      // Seleccionar configuración y reclamar interfaz
+      // Seleccionar configuración
       if(dev.configuration === null) await dev.selectConfiguration(1);
       
-      // Encontrar interfaz de datos (CDC, HID o vendor)
-      let claimed = false;
+      // Mostrar info de interfaces para diagnóstico
+      const ifaceInfo = dev.configuration.interfaces.map(i => ({
+        num: i.interfaceNumber,
+        alts: i.alternates.map(a => ({
+          cls: a.interfaceClass,
+          sub: a.interfaceSubclass,
+          eps: a.endpoints.map(e => `${e.direction}@${e.endpointNumber}(${e.type})`)
+        }))
+      }));
+      console.log("Interfaces:", JSON.stringify(ifaceInfo, null, 2));
+
+      // Intentar reclamar todas las interfaces disponibles
+      let claimedIfaces = [];
+      let ep = null;
+      
       for(const iface of dev.configuration.interfaces) {
         try {
           await dev.claimInterface(iface.interfaceNumber);
-          claimed = true;
-          break;
-        } catch(_e) {}
+          claimedIfaces.push(iface.interfaceNumber);
+          // Buscar endpoint IN en esta interfaz
+          for(const alt of iface.alternates) {
+            for(const e of alt.endpoints) {
+              if(e.direction === "in" && !ep) ep = e;
+            }
+          }
+        } catch(e) {
+          console.log(`Interface ${iface.interfaceNumber} failed:`, e.message);
+        }
       }
-      if(!claimed) throw new Error("No se pudo reclamar ninguna interfaz");
+
+      // Para CDC: enviar comando de inicialización (SET_LINE_CODING)
+      // Baudrate 115200, 8N1
+      if(claimedIfaces.length > 0) {
+        try {
+          await dev.controlTransferOut({
+            requestType: "class", recipient: "interface",
+            request: 0x20, // SET_LINE_CODING
+            value: 0, index: claimedIfaces[0]
+          }, new Uint8Array([0x00, 0xC2, 0x01, 0x00, 0x00, 0x00, 0x08]).buffer);
+          // DTR + RTS activos
+          await dev.controlTransferOut({
+            requestType: "class", recipient: "interface",
+            request: 0x22, // SET_CONTROL_LINE_STATE
+            value: 0x03, index: claimedIfaces[0]
+          });
+        } catch(e) { console.log("CDC init:", e.message); }
+      }
+
+      if(claimedIfaces.length === 0) throw new Error(
+        `Sin acceso a interfaces. Interfaz info: ${JSON.stringify(ifaceInfo)}`
+      );
+
+      setInfo(prev => ({...prev, 
+        interfaces: claimedIfaces.join(","),
+        endpoint: ep ? `EP${ep.endpointNumber} ${ep.type}` : "buscando..."
+      }));
+
+      if(!ep) {
+        // Intentar endpoint bulk 1 o 2 por defecto (común en CDC)
+        ep = { endpointNumber: 1, packetSize: 64 };
+      }
 
       setReading(true); stopRef.current = false;
-
-      // Encontrar endpoint IN (para leer datos del dispositivo)
-      let ep = null;
-      for(const iface of dev.configuration.interfaces) {
-        for(const alt of iface.alternates) {
-          for(const e of alt.endpoints) {
-            if(e.direction === "in") { ep = e; break; }
-          }
-          if(ep) break;
-        }
-        if(ep) break;
-      }
-
-      if(!ep) throw new Error("No se encontró endpoint de entrada");
 
       // Leer datos en loop
       const readLoop = async () => {
