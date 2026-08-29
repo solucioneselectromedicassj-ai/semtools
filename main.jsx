@@ -1037,7 +1037,7 @@ function ToolORPInner() {
   return (
     <div style={S.wrap}>
       <div style={S.st(col)}>▸ ORP — Potencial Redox</div>
-      {on&&<button style={S.btn("r")} onClick={stop}>⏹ Detener</button>}
+      {on&&<StopFAB onStop={stop} col={col}/>}
 
       <div style={{...glass(col,0.06),borderRadius:10,padding:"10px 14px",
         border:`1px solid rgba(${rgb(col)},0.2)`,marginBottom:4}}>
@@ -1150,7 +1150,7 @@ function ToolpHInner() {
   return (
     <div style={S.wrap}>
       <div style={S.st(col)}>▸ pH — Electrodo de Vidrio</div>
-      {on&&<button style={S.btn("r")} onClick={stop}>⏹ Detener</button>}
+      {on&&<StopFAB onStop={stop} col={col}/>}
 
       {ph!==null&&(
         <div style={{...S.disp(phCol),textAlign:"center",padding:"20px 16px"}}>
@@ -1311,11 +1311,8 @@ function ToolJackSensor({ modId }) {
         style={{ width:"100%", borderRadius:8, border:`1px solid rgba(${rgb(col)},0.2)`,
                  background:"rgba(0,0,0,0.7)" }}/>
 
-      {/* Botón siempre visible ANTES del historial */}
-      {on
-        ?<button style={S.btn("r")} onClick={stop}>⏹ Desconectar</button>
-        :<button style={S.btn("p",col)} onClick={start}>Conectar {m.icon} {m.label}</button>
-      }
+      {on && <StopFAB onStop={stop} label="⏹ Desconectar" col={col}/>}
+      {!on && <button style={S.btn("p",col)} onClick={start}>Conectar {m.icon} {m.label}</button>}
 
       {/* Gráfica temporal */}
       {trendData.length>2&&<TimeChart data={trendData} col={col} unit={" "+m.unit} height={80}/>}
@@ -1448,11 +1445,8 @@ function ToolDecibeles() {
         </div>
       )}
       {err&&<div style={{color:C.red,fontFamily:MONO,fontSize:11}}>{err}</div>}
-      {/* Botón SIEMPRE VISIBLE — antes del historial */}
-      {on
-        ?<button style={S.btn("r")} onClick={stop}>⏹ Detener</button>
-        :<button style={S.btn("p",col)} onClick={start}>Activar micrófono</button>
-      }
+      {on && <StopFAB onStop={stop} col={col}/>}
+      {!on && <button style={S.btn("p",col)} onClick={start}>Activar micrófono</button>}
 
       {/* Gráfica temporal */}
       {history.length>2&&<TimeChart data={history} col={col} unit=" dB" height={80}/>}
@@ -2341,7 +2335,7 @@ function ToolEspectro() {
   return (
     <div style={S.wrap}>
       <div style={S.st(col)}>▸ Analizador de Espectro</div>
-      {on && <button style={S.btn("r")} onClick={stop}>⏹ Detener</button>}
+      {on && <StopFAB onStop={stop} col={col}/>}
       {peak&&<div style={{...S.disp(col),textAlign:"center",padding:"8px 16px"}}>
         <div style={{fontFamily:MONO,fontSize:9,color:C.dim}}>FRECUENCIA DOMINANTE</div>
         <div style={{fontFamily:MONO,fontSize:28,fontWeight:700,color:col,textShadow:`0 0 14px ${col}`}}>
@@ -2435,7 +2429,7 @@ function ToolVibrómetro() {
   return (
     <div style={S.wrap}>
       <div style={S.st(col)}>▸ Vibrómetro</div>
-      {on&&<button style={S.btn("r")} onClick={stop}>⏹ Detener</button>}
+      {on&&<StopFAB onStop={stop} col={col}/>}
       <div style={{display:"flex",gap:8}}>
         <div style={{...S.disp(col),flex:2,textAlign:"center",padding:"16px 8px"}}>
           <div style={{fontFamily:MONO,fontSize:44,fontWeight:700,color:col,lineHeight:1,textShadow:`0 0 20px ${col}`}}>
@@ -2542,7 +2536,7 @@ function ToolPPG() {
   return (
     <div style={S.wrap}>
       <div style={S.st(col)}>▸ PPG — Pulso Cardíaco</div>
-      {on&&<button style={S.btn("r")} onClick={stop}>⏹ Detener</button>}
+      {on&&<StopFAB onStop={stop} col={col}/>}
 
       <div style={{...glass(col,0.07),borderRadius:12,padding:14,border:`1px solid rgba(${rgb(col)},0.25)`,marginBottom:4}}>
         <div style={{fontFamily:MONO,fontSize:10,color:col,fontWeight:700,marginBottom:8}}>INSTRUCCIONES</div>
@@ -2674,7 +2668,7 @@ function ToolECGGen() {
   return (
     <div style={S.wrap}>
       <div style={S.st(col)}>▸ Generador ECG — Simulador PQRST</div>
-      {on&&<button style={S.btn("r")} onClick={stop}>⏹ Detener</button>}
+      {on&&<StopFAB onStop={stop} col={col}/>}
 
       <div style={{...glass(col,0.06),borderRadius:12,padding:"10px 14px",
         border:`1px solid rgba(${rgb(col)},0.2)`,marginBottom:4}}>
@@ -2833,7 +2827,7 @@ function ToolConductimetro() {
   return (
     <div style={S.wrap}>
       <div style={S.st(col)}>▸ Conductímetro — mS/cm</div>
-      {on&&<button style={S.btn("r")} onClick={stop}>⏹ Detener</button>}
+      {on&&<StopFAB onStop={stop} col={col}/>}
 
       {/* Hardware */}
       <div style={{...glass(col,0.06),borderRadius:12,padding:"12px 14px",
@@ -5231,7 +5225,7 @@ function ToolSpO2() {
   return (
     <div style={S.wrap}>
       <div style={S.st(col)}>▸ SpO2 — Saturación de Oxígeno</div>
-      {on&&<button style={S.btn("r")} onClick={stop}>⏹ Detener</button>}
+      {on&&<StopFAB onStop={stop} col={col}/>}
 
       {/* Hardware requerido */}
       <div style={{...glass(col,0.06),borderRadius:12,padding:"12px 14px",
@@ -5364,7 +5358,7 @@ function ToolECG() {
   return (
     <div style={S.wrap}>
       <div style={S.st(col)}>▸ ECG — Electrocardiograma básico</div>
-      {on&&<button style={S.btn("r")} onClick={stop}>⏹ Detener</button>}
+      {on&&<StopFAB onStop={stop} col={col}/>}
 
       <div style={{...glass(col,0.06),borderRadius:12,padding:"12px 14px",
         border:`1px solid rgba(${rgb(col)},0.25)`}}>
@@ -5991,6 +5985,28 @@ function BatteryDisplay() {
   if (pct === null) return null;
   const col = chg ? C.green : pct > 40 ? C.dim : pct > 20 ? C.amber : C.red;
   return <span style={{fontFamily:MONO,fontSize:8,color:col,fontWeight:700}}>{chg?"⚡":""}{pct}%</span>;
+}
+
+
+// ── FAB — botón de detener fijo en pantalla ──────────────────────────────────
+function StopFAB({ onStop, label="⏹ Detener", col }) {
+  const c = col || C.red;
+  return (
+    <div style={{
+      position:"fixed", bottom:70, left:16, right:16, zIndex:999,
+      pointerEvents:"none",
+    }}>
+      <button style={{
+        width:"100%", border:"none", borderRadius:16, padding:"14px 0",
+        background:c, color:"#fff", fontFamily:MONO, fontSize:15, fontWeight:700,
+        cursor:"pointer", pointerEvents:"all",
+        boxShadow:`0 4px 24px rgba(0,0,0,0.5), 0 0 20px ${c}66`,
+        letterSpacing:1,
+      }} onClick={onStop}>
+        {label}
+      </button>
+    </div>
+  );
 }
 
 // ── Error Boundary ────────────────────────────────────────────────────────────
