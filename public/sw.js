@@ -1,39 +1,21 @@
-const CACHE = 'sem-tools-v10';
-const PRECACHE = ['/', '/manifest.json'];
-
+// SW v11 — network only, auto-unregister old caches
 self.addEventListener('install', e => {
   e.waitUntil(
-    caches.open(CACHE)
-      .then(c => c.addAll(PRECACHE).catch(() => {}))
-      .then(() => self.skipWaiting())  // fuerza activación inmediata
+    caches.keys()
+      .then(keys => Promise.all(keys.map(k => caches.delete(k))))
+      .then(() => self.skipWaiting())
   );
 });
 
 self.addEventListener('activate', e => {
   e.waitUntil(
     caches.keys()
-      .then(keys => Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k))))
-      .then(() => self.clients.claim())  // toma control de todas las pestañas
+      .then(keys => Promise.all(keys.map(k => caches.delete(k))))
+      .then(() => self.clients.claim())
   );
 });
 
+// Sin caché — siempre red
 self.addEventListener('fetch', e => {
-  if (e.request.method !== 'GET') return;
-  // JS/CSS assets: network first (siempre la versión más nueva)
-  if (e.request.url.includes('/assets/')) {
-    e.respondWith(
-      fetch(e.request).catch(() => caches.match(e.request))
-    );
-    return;
-  }
-  // Resto: network first con fallback a cache
-  e.respondWith(
-    fetch(e.request)
-      .then(res => {
-        const clone = res.clone();
-        caches.open(CACHE).then(c => c.put(e.request, clone));
-        return res;
-      })
-      .catch(() => caches.match(e.request))
-  );
+  e.respondWith(fetch(e.request).catch(() => new Response('offline', {status: 503})));
 });
