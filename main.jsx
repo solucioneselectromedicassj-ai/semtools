@@ -104,7 +104,7 @@ const BLOCKS = [
   { id:"celular",  icon:"📱", label:"CELULAR",     col:C.cyan,   tools:["decibeles","nivel","brujula","oscilo","vibro","espectro","generador","ecggen","sistema","qr","ir","nfc"] },
   { id:"camara",   icon:"📷", label:"CÁMARA + IA", col:C.violet, tools:["resistencias","integrados","distancia","endoscopio","ppg","cloro"] },
   { id:"jack",     icon:"🔌", label:"JACK 3.5mm",  col:C.orange, tools:["jack_thermo","jack_thermo2","jack_air","jack_volt","jack_light","jack_raw","spo2","ecg","conductimetro","orp","phjack"] },
-  { id:"celularplus", icon:"📶", label:"CONECTIVIDAD", col:C.blue, tools:["red","ping","lan","http","ble","ipinfo"] },
+  { id:"celularplus", icon:"📶", label:"CONECTIVIDAD", col:C.blue, tools:["red","ping","lan","http","ble","ipinfo","usbprobe"] },
   { id:"modulos",  icon:"📡", label:"MÓDULOS",     col:C.green,  tools:["modulos"] },
 ];
 
@@ -3142,6 +3142,227 @@ function ToolCloro() {
   );
 }
 
+
+// ── USB-C Probe — WebUSB ──────────────────────────────────────────────────────
+function ToolUSBProbe() {
+  const col = C.cyan;
+  const [device,   setDevice]   = useState(null);
+  const [info,     setInfo]     = useState(null);
+  const [packets,  setPackets]  = useState([]);
+  const [reading,  setReading]  = useState(false);
+  const [err,      setErr]      = useState(null);
+  const [spo2,     setSpo2]     = useState(null);
+  const [bpm,      setBpm]      = useState(null);
+  const stopRef = useRef(false);
+
+  const supported = "usb" in navigator;
+
+  const connect = async () => {
+    try {
+      setErr(null); setInfo(null); setPackets([]); setSpo2(null); setBpm(null);
+      const dev = await navigator.usb.requestDevice({ filters: [] });
+      setDevice(dev);
+      await dev.open();
+
+      // Info del dispositivo
+      setInfo({
+        name:    dev.productName || "Desconocido",
+        vendor:  `0x${dev.vendorId.toString(16).padStart(4,"0")}`,
+        product: `0x${dev.productId.toString(16).padStart(4,"0")}`,
+        configs: dev.configurations.length,
+        speed:   dev.usbVersionMajor + "." + dev.usbVersionMinor,
+      });
+
+      // Seleccionar configuración y reclamar interfaz
+      if(dev.configuration === null) await dev.selectConfiguration(1);
+      
+      // Encontrar interfaz de datos (CDC, HID o vendor)
+      let claimed = false;
+      for(const iface of dev.configuration.interfaces) {
+        try {
+          await dev.claimInterface(iface.interfaceNumber);
+          claimed = true;
+          break;
+        } catch(_e) {}
+      }
+      if(!claimed) throw new Error("No se pudo reclamar ninguna interfaz");
+
+      setReading(true); stopRef.current = false;
+
+      // Encontrar endpoint IN (para leer datos del dispositivo)
+      let ep = null;
+      for(const iface of dev.configuration.interfaces) {
+        for(const alt of iface.alternates) {
+          for(const e of alt.endpoints) {
+            if(e.direction === "in") { ep = e; break; }
+          }
+          if(ep) break;
+        }
+        if(ep) break;
+      }
+
+      if(!ep) throw new Error("No se encontró endpoint de entrada");
+
+      // Leer datos en loop
+      const readLoop = async () => {
+        while(!stopRef.current) {
+          try {
+            const result = await dev.transferIn(ep.endpointNumber, ep.packetSize || 64);
+            if(result.data && result.data.byteLength > 0) {
+              const bytes = Array.from(new Uint8Array(result.data.buffer));
+              const hex   = bytes.map(b => b.toString(16).padStart(2,"0").toUpperCase()).join(" ");
+              const ascii = bytes.map(b => b>=32&&b<127?String.fromCharCode(b):"·").join("");
+              const ts    = new Date().toLocaleTimeString("es-AR");
+
+              setPackets(p => [...p.slice(-49), { hex, ascii, bytes, ts }]);
+
+              // Detectar SpO2 — patrones comunes CONTEC/Nellcor
+              // Paquete típico: [0xD0, SpO2%, PR_high, PR_low, status, ...]
+              // O:              [sync, SpO2, PR, waveform...]
+              for(let i=0; i<bytes.length-2; i++) {
+                // Patrón CONTEC: byte sync 0xD0 o 0xFF
+                if((bytes[i]===0xD0||bytes[i]===0xFF) && bytes[i+1]>50 && bytes[i+1]<=100) {
+                  setSpo2(bytes[i+1]);
+                  const pr = bytes.length>i+3 ? (bytes[i+2]<<8|bytes[i+3]) : bytes[i+2];
+                  if(pr>30&&pr<250) setBpm(pr);
+                }
+                // Patrón alternativo: SpO2 en rango 70-100, PR en rango 40-200
+                if(bytes[i]>=70&&bytes[i]<=100 && i+1<bytes.length && bytes[i+1]>=40&&bytes[i+1]<=200) {
+                  if(i===0||bytes[i-1]===0x01||bytes[i-1]===0x02) {
+                    setSpo2(bytes[i]); setBpm(bytes[i+1]);
+                  }
+                }
+              }
+            }
+          } catch(e) {
+            if(!stopRef.current) setErr("Error de lectura: " + e.message);
+            break;
+          }
+        }
+        setReading(false);
+      };
+      readLoop();
+
+    } catch(e) {
+      if(e.name !== "NotFoundError") setErr(e.message);
+      setReading(false);
+    }
+  };
+
+  const disconnect = async () => {
+    stopRef.current = true;
+    try { await device?.close(); } catch(_e) {}
+    setDevice(null); setReading(false); setInfo(null);
+  };
+
+  const spo2Col = spo2 ? (spo2>=95?C.green:spo2>=90?C.amber:C.red) : col;
+
+  return (
+    <div style={S.wrap}>
+      <div style={S.st(col)}>▸ USB-C Probe — Analizador WebUSB</div>
+
+      {!supported && (
+        <div style={{...glass(C.red,0.1),borderRadius:12,padding:14,border:`1px solid ${C.red}`}}>
+          <div style={{fontFamily:MONO,fontSize:11,color:C.red,fontWeight:700}}>
+            WebUSB no disponible
+          </div>
+          <div style={{fontFamily:MONO,fontSize:10,color:C.dim,marginTop:6,lineHeight:1.7}}>
+            Requiere Chrome en Android con USB OTG habilitado. Verificá que Chrome sea el navegador por defecto y que el celular soporte USB Host.
+          </div>
+        </div>
+      )}
+
+      {supported && !device && (
+        <div style={{...glass(col,0.07),borderRadius:12,padding:16,
+          border:`1px solid rgba(${rgb(col)},0.25)`}}>
+          <div style={{fontFamily:MONO,fontSize:10,fontWeight:700,color:col,marginBottom:10}}>
+            INSTRUCCIONES
+          </div>
+          {["1. Conectá el sensor CONTEC RS01 al celular con un cable USB-C",
+            "2. Encendé el dispositivo CONTEC",
+            "3. Tocá 'Conectar dispositivo USB'",
+            "4. Chrome muestra una lista — elegí el dispositivo CONTEC",
+            "5. La app lee los datos crudos y detecta SpO2 automáticamente"
+          ].map((t,i)=>(
+            <div key={i} style={{fontFamily:MONO,fontSize:10,color:C.dim,lineHeight:1.9}}>{t}</div>
+          ))}
+        </div>
+      )}
+
+      {/* Datos SpO2 detectados */}
+      {(spo2||bpm) && (
+        <div style={{display:"flex",gap:8}}>
+          <div style={{...S.disp(spo2Col),flex:2,textAlign:"center",padding:"16px 8px"}}>
+            <div style={{fontFamily:MONO,fontSize:9,color:C.dim}}>SpO₂</div>
+            <div style={{fontFamily:MONO,fontSize:52,fontWeight:700,color:spo2Col,
+              lineHeight:1,textShadow:`0 0 20px ${spo2Col}`}}>{spo2??"-"}</div>
+            <div style={{fontFamily:MONO,fontSize:11,color:C.dim}}>%</div>
+          </div>
+          <div style={{...S.disp(C.amber),flex:1,textAlign:"center",padding:"16px 4px"}}>
+            <div style={{fontFamily:MONO,fontSize:9,color:C.dim}}>BPM</div>
+            <div style={{fontFamily:MONO,fontSize:32,fontWeight:700,color:C.amber,
+              lineHeight:1}}>{bpm??"-"}</div>
+          </div>
+        </div>
+      )}
+
+      {/* Info del dispositivo */}
+      {info && (
+        <div style={{...S.res(col)}}>
+          <div style={{fontFamily:MONO,fontSize:9,color:col,fontWeight:700,marginBottom:6}}>
+            DISPOSITIVO DETECTADO
+          </div>
+          {Object.entries(info).map(([k,v])=>(
+            <div key={k} style={{display:"flex",justifyContent:"space-between",
+              padding:"4px 0",borderBottom:`1px solid ${C.bord}`}}>
+              <span style={{fontFamily:MONO,fontSize:9,color:C.dim}}>{k}</span>
+              <span style={{fontFamily:MONO,fontSize:9,color:col,fontWeight:700}}>{v}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Stream de paquetes */}
+      {packets.length > 0 && (
+        <div style={{...S.res(col),maxHeight:200,overflow:"auto"}}>
+          <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}>
+            <div style={{fontFamily:MONO,fontSize:9,color:col,fontWeight:700}}>
+              DATOS CRUDOS ({packets.length} paquetes)
+            </div>
+            <button style={{...S.btn("s"),padding:"2px 8px",fontSize:9}}
+              onClick={()=>setPackets([])}>Limpiar</button>
+          </div>
+          {packets.slice(-10).map((p,i)=>(
+            <div key={i} style={{marginBottom:6,padding:"6px 8px",
+              background:"rgba(0,0,0,0.4)",borderRadius:4}}>
+              <div style={{fontFamily:MONO,fontSize:8,color:C.dim}}>{p.ts}</div>
+              <div style={{fontFamily:MONO,fontSize:9,color:col,wordBreak:"break-all",
+                lineHeight:1.6}}>{p.hex}</div>
+              <div style={{fontFamily:MONO,fontSize:9,color:C.dim}}>{p.ascii}</div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {err && <div style={{color:C.red,fontFamily:MONO,fontSize:10,lineHeight:1.6}}>{err}</div>}
+
+      {!device
+        ? <button style={{...S.btn("p",col),...(!supported&&{opacity:.4})}}
+            onClick={supported?connect:null}>
+            🔌 Conectar dispositivo USB
+          </button>
+        : <button style={S.btn("r")} onClick={disconnect}>⏹ Desconectar</button>
+      }
+
+      <div style={S.note}>
+        Conectá cualquier dispositivo USB-C: saturómetros, monitores, analizadores.
+        Los paquetes crudos permiten identificar el protocolo para desarrollar el módulo definitivo.
+        VendorID + ProductID quedan registrados para el diseño del módulo SEM.
+      </div>
+    </div>
+  );
+}
+
 // ── Conectividad — herramientas avanzadas ────────────────────────────────────
 
 // ── Ping + gráfico en tiempo real ────────────────────────────────────────────
@@ -5600,6 +5821,7 @@ const TOOL_NEEDS = {
   http:         { needs:[],                          label:"HTTP Tester"        },
   ble:          { needs:[],                          label:"Scanner BLE"        },
   ipinfo:       { needs:[],                          label:"IP / ISP"           },
+  usbprobe:     { needs:[],                          label:"USB-C Probe"        },
   modulos:      { needs:[],                          label:"Módulos"            },
   tacometro:    { needs:[],                          label:"Tacómetro"          },
 };
@@ -5951,6 +6173,7 @@ function getView(tool) {
     case "nfc":           return <ToolNFC key={tool}/>;
     case "ir":            return <ToolIR key={tool}/>;
     case "endoscopio":    return <ToolEndoscopio key={tool}/>;
+    case "usbprobe":      return <ToolUSBProbe key={tool}/>;
     case "modulos":       return <ToolModulos key={tool}/>;
     case "jack_thermo":   return <ToolJackSensor key={tool} modId="jack_thermo"/>;
     case "jack_thermo2":  return <ToolJackSensor key={tool} modId="jack_thermo2"/>;
