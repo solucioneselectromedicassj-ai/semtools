@@ -3190,56 +3190,52 @@ function ToolUSBProbe() {
       }));
       console.log("Interfaces:", JSON.stringify(ifaceInfo, null, 2));
 
-      // Intentar reclamar todas las interfaces disponibles
-      let claimedIfaces = [];
+      // CONTEC RS01: Interface 1 (bulk data) es la que tiene los datos
+      // Interface 0 es HID (protegida, Chrome la bloquea)
+      // Interface 1: cls=8 sub=6, EP2 bulk IN/OUT → datos SpO2
       let ep = null;
       
-      for(const iface of dev.configuration.interfaces) {
-        try {
-          await dev.claimInterface(iface.interfaceNumber);
-          claimedIfaces.push(iface.interfaceNumber);
-          // Buscar endpoint IN en esta interfaz
-          for(const alt of iface.alternates) {
-            for(const e of alt.endpoints) {
-              if(e.direction === "in" && !ep) ep = e;
+      // Reclamar interfaz 1 (datos bulk)
+      try {
+        await dev.claimInterface(1);
+        ep = { endpointNumber: 2, packetSize: 64, type: "bulk" };
+        console.log("✓ Interface 1 reclamada, EP2 bulk listo");
+      } catch(e) {
+        // Fallback: intentar todas
+        for(const iface of dev.configuration.interfaces) {
+          try {
+            await dev.claimInterface(iface.interfaceNumber);
+            for(const alt of iface.alternates) {
+              for(const e of alt.endpoints) {
+                if(e.direction === "in" && e.type === "bulk") ep = e;
+              }
             }
-          }
-        } catch(e) {
-          console.log(`Interface ${iface.interfaceNumber} failed:`, e.message);
+            break;
+          } catch(_e) {}
         }
+        if(!ep) throw new Error("No se pudo reclamar interfaz de datos. " + e.message);
       }
 
-      // Para CDC: enviar comando de inicialización (SET_LINE_CODING)
-      // Baudrate 115200, 8N1
-      if(claimedIfaces.length > 0) {
-        try {
-          await dev.controlTransferOut({
-            requestType: "class", recipient: "interface",
-            request: 0x20, // SET_LINE_CODING
-            value: 0, index: claimedIfaces[0]
-          }, new Uint8Array([0x00, 0xC2, 0x01, 0x00, 0x00, 0x00, 0x08]).buffer);
-          // DTR + RTS activos
-          await dev.controlTransferOut({
-            requestType: "class", recipient: "interface",
-            request: 0x22, // SET_CONTROL_LINE_STATE
-            value: 0x03, index: claimedIfaces[0]
-          });
-        } catch(e) { console.log("CDC init:", e.message); }
-      }
-
-      if(claimedIfaces.length === 0) throw new Error(
-        `Sin acceso a interfaces. Interfaz info: ${JSON.stringify(ifaceInfo)}`
-      );
+      // Enviar comando de inicio al RS01 (vendor-specific o SCSI)
+      // El RS01 usa protocolo propietario sobre bulk — primero enviamos un inquiry
+      try {
+        // Comando SCSI Inquiry (Mass Storage BOT)
+        const cbw = new Uint8Array(31);
+        cbw[0]=0x55;cbw[1]=0x53;cbw[2]=0x42;cbw[3]=0x43; // "USBC" signature
+        cbw[4]=0x01;cbw[5]=0x00;cbw[6]=0x00;cbw[7]=0x00; // tag
+        cbw[8]=0x24;cbw[9]=0x00;cbw[10]=0x00;cbw[11]=0x00; // transfer length 36
+        cbw[12]=0x80; // flags: data IN
+        cbw[13]=0x00; // LUN 0
+        cbw[14]=0x06; // CB length
+        cbw[15]=0x12; // INQUIRY command
+        await dev.transferOut(2, cbw.buffer);
+        console.log("✓ SCSI Inquiry enviado");
+      } catch(e) { console.log("Inquiry:", e.message); }
 
       setInfo(prev => ({...prev, 
-        interfaces: claimedIfaces.join(","),
-        endpoint: ep ? `EP${ep.endpointNumber} ${ep.type}` : "buscando..."
+        interfaces: "1 (bulk data)",
+        endpoint: "EP2 bulk IN/OUT"
       }));
-
-      if(!ep) {
-        // Intentar endpoint bulk 1 o 2 por defecto (común en CDC)
-        ep = { endpointNumber: 1, packetSize: 64 };
-      }
 
       setReading(true); stopRef.current = false;
 
