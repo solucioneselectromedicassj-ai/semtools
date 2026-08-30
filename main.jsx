@@ -5023,9 +5023,33 @@ function ToolModulos() {
             <div style={{ fontFamily:MONO, fontSize:11, color:C.green, fontWeight:700, marginTop:4 }}>{m.price}</div>
           </div>
         </div>
-        {m.status === "available"
+        {/* Botón abrir herramienta si está construida */}
+        {m.toolId && (
+          <button style={{...S.btn("p",m.col),display:"flex",alignItems:"center",
+            justifyContent:"center",gap:8}}
+            onClick={()=>window.__semGoTo?.(m.toolId)}>
+            ▶ Abrir herramienta
+          </button>
+        )}
+
+        {/* Botón activar módulo (requiere hardware físico) */}
+        {m.moduleId && (()=>{
+          const [active,setActive]=useState(()=>isModActive(m.moduleId));
+          return (
+            <button style={{...S.btn(active?"r":"s"),display:"flex",alignItems:"center",
+              justifyContent:"center",gap:8}}
+              onClick={()=>{
+                if(active){deactivateMod(m.moduleId);setActive(false);}
+                else{activateMod(m.moduleId);setActive(true);}
+              }}>
+              {active?"🔒 Desactivar módulo":"🔓 Tengo este módulo — Activar"}
+            </button>
+          );
+        })()}
+
+        {m.status === "available" && !m.toolId
           ? <button style={S.btn("p", C.green)}>🛒  Consultar disponibilidad</button>
-          : <div style={S.tag(false)}>⏳  {st.label} — te avisamos cuando esté listo</div>
+          : !m.toolId && <div style={S.tag(false)}>⏳  {st.label} — te avisamos cuando esté listo</div>
         }
         <div style={S.note}>Los módulos son de fabricación local. Compatible con Android 8+ y iOS 14+. Sin drivers adicionales.</div>
       </div>
