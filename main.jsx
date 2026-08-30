@@ -6,7 +6,7 @@ if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(() => {}));
 }
 
-const VERSION = "2.7";
+const VERSION = "2.8";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 const rgb = hex => { if(!hex||typeof hex!=='string'||!hex.startsWith('#')) return '128,128,128'; return `${parseInt(hex.slice(1,3),16)},${parseInt(hex.slice(3,5),16)},${parseInt(hex.slice(5,7),16)}`; };
@@ -1214,17 +1214,20 @@ function ToolJackSensor({ modId }) {
   useEffect(()=>{
     if(!isDemoMode()) return;
     setOn(true);
-    const demoKey={
-      jack_thermo:"temperatura", jack_thermo2:"temperatura",
-      jack_air:"flujo_aire", jack_volt:"voltaje",
-      jack_light:"luminosidad", jack_raw:"sinal_cruda",
-    }[modId] || "temperatura";
+    const DEMO_VALS={
+      jack_thermo:  ()=>+(36.4+Math.random()*0.8).toFixed(1),
+      jack_thermo2: ()=>+(36.4+Math.random()*0.8).toFixed(1),
+      jack_air:     ()=>+(0.03+Math.random()*0.06).toFixed(3),
+      jack_volt:    ()=>+(12.1+Math.random()*0.4).toFixed(2),
+      jack_light:   ()=>Math.round(420+Math.random()*80),
+      jack_raw:     ()=>+((Math.random()-0.5)*0.8).toFixed(3),
+    };
+    const gen=DEMO_VALS[modId]||(()=>+(36.5+Math.random()).toFixed(1));
     const t=setInterval(()=>{
-      const v=+DEMO_GENERATORS[demoKey]?.().toFixed(2) ?? 0;
-      const cv=m.convert?m.convert(v)??v:v;
+      const cv=gen();
       setVal(cv); setPeak(p=>p===null||cv>p?cv:p); setMin(n=>n===null||cv<n?cv:n);
       setTrend(h=>[...h.slice(-59),cv]);
-      if(m.stereo) setVal2(+(cv+(Math.random()-0.5)*0.5).toFixed(2));
+      if(m.stereo) setVal2(+(cv+(Math.random()-0.5)*0.3).toFixed(2));
     },400);
     return ()=>clearInterval(t);
   },[]);
@@ -1295,9 +1298,23 @@ function ToolJackSensor({ modId }) {
       {!m.stereo ? (
         <div style={{ ...S.disp(col), display:"flex", flexDirection:"column", alignItems:"center",
                       justifyContent:"center", padding:"28px 18px", minHeight:140 }}>
-          <div style={{ fontFamily:MONO, fontSize:64, fontWeight:700, color:col, lineHeight:1,
-                        textShadow:`0 0 30px ${col}` }}>{fmt(val)}</div>
-          <div style={{ fontFamily:MONO, fontSize:16, color:`rgba(${rgb(col)},0.7)`, marginTop:6 }}>{m.unit}</div>
+          {(()=>{
+            const isTemp=modId==="jack_thermo"||modId==="jack_thermo2";
+            const [showF,setShowF]=React.useState(false);
+            const dv=isTemp&&showF&&val!==null?(val*9/5+32).toFixed(1):fmt(val);
+            const du=isTemp?(showF?"°F":"°C"):m.unit;
+            return (<>
+              <div style={{fontFamily:MONO,fontSize:64,fontWeight:700,color:col,lineHeight:1,
+                textShadow:`0 0 30px ${col}`}}>{dv}</div>
+              <div style={{display:"flex",alignItems:"center",gap:8,marginTop:6}}>
+                <div style={{fontFamily:MONO,fontSize:16,color:`rgba(${rgb(col)},0.7)`}}>{du}</div>
+                {isTemp&&<button style={{border:`1px solid rgba(${rgb(col)},0.5)`,borderRadius:6,
+                  padding:"2px 8px",background:"rgba(255,255,255,0.05)",cursor:"pointer",
+                  fontFamily:MONO,fontSize:9,color:col}}
+                  onClick={()=>setShowF(f=>!f)}>{showF?"→°C":"→°F"}</button>}
+              </div>
+            </>);
+          })()}
           <div style={S.dlbl}>{m.label.toUpperCase()}</div>
         </div>
       ) : (
@@ -3438,8 +3455,8 @@ function ToolUSBProbe() {
         <div style={{fontFamily:MONO,fontSize:9,color:C.violet,fontWeight:700,
           letterSpacing:2,marginBottom:8}}>ALTERNATIVA — LEER ARCHIVOS DEL DISPOSITIVO</div>
         <div style={{fontFamily:MONO,fontSize:10,color:C.dim,lineHeight:1.8,marginBottom:10}}>
-          El CONTEC RS01 se monta como pendrive en Windows. Abrí el Explorador de archivos
-          y fijate si aparece una unidad nueva. Si sí, usá este botón para leer los datos grabados:
+          Algunos dispositivos USB se montan como pendrive en Windows. Si aparece una unidad nueva
+          en el Explorador de archivos, usá este botón para leer los datos:
         </div>
         {(()=>{
           const [fileData,setFileData]=useState(null);
@@ -3481,7 +3498,7 @@ function ToolUSBProbe() {
           return (
             <>
               <button style={S.btn("p",C.violet)} onClick={readFile}>
-                📂 Abrir archivo del CONTEC RS01
+                📂 Abrir archivo del dispositivo USB
               </button>
               {fileName&&(
                 <div style={{marginTop:10}}>
