@@ -6379,7 +6379,19 @@ class ErrorBoundary extends React.Component {
 
 function App() {
   const [tool,setTool]=useState(null);
-  const [onboardStep,setOnboardStep]=useState(null); // null=auto, 1=forzar paso 1, 2=forzar paso 2
+  const [onboardStep,setOnboardStep]=useState(null);
+
+  // Activar modo dev si viene con ?devmode=1 en la URL
+  useEffect(()=>{
+    const params = new URLSearchParams(window.location.search);
+    if(params.get("devmode")==="1"){
+      const ALL_MODS=["aquapanel","ecgmodule","condmod","cloromod","tacolasr","oscilo2","comptest","spo2mod","irmodule","termocam","redcable"];
+      const m={}; ALL_MODS.forEach(id=>m[id]=true);
+      try{ localStorage.setItem("sem_active_mods", JSON.stringify(m)); }catch(_e){}
+      // Limpiar el parámetro de la URL
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+  }, []); // null=auto, 1=forzar paso 1, 2=forzar paso 2
   const [showOnboard,setShowOnboard]=useState(()=>{
     try{ const k=localStorage.getItem("sem_gemini_key"); return !k; }
     catch(_e){ return false; }
