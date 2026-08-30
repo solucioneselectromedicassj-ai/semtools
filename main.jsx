@@ -1040,6 +1040,7 @@ function ToolORPInner() {
   return (
     <div style={S.wrap}>
       <div style={S.st(col)}>▸ ORP — Potencial Redox</div>
+      <DemoBanner/>
       {on&&<StopFAB onStop={stop} col={col}/>}
 
       <div style={{...glass(col,0.06),borderRadius:10,padding:"10px 14px",
@@ -1209,6 +1210,24 @@ function ToolJackSensor({ modId }) {
   const [on,setOn]=useState(false), [val,setVal]=useState(null), [val2,setVal2]=useState(null);
   const [peak,setPeak]=useState(null), [minV,setMin]=useState(null), [err,setErr]=useState(null);
   const [trendData,setTrend]=useState([]);
+  // Demo mode
+  useEffect(()=>{
+    if(!isDemoMode()) return;
+    setOn(true);
+    const demoKey={
+      jack_thermo:"temperatura", jack_thermo2:"temperatura",
+      jack_air:"flujo_aire", jack_volt:"voltaje",
+      jack_light:"luminosidad", jack_raw:"sinal_cruda",
+    }[modId] || "temperatura";
+    const t=setInterval(()=>{
+      const v=+DEMO_GENERATORS[demoKey]?.().toFixed(2) ?? 0;
+      const cv=m.convert?m.convert(v)??v:v;
+      setVal(cv); setPeak(p=>p===null||cv>p?cv:p); setMin(n=>n===null||cv<n?cv:n);
+      setTrend(h=>[...h.slice(-59),cv]);
+      if(m.stereo) setVal2(+(cv+(Math.random()-0.5)*0.5).toFixed(2));
+    },400);
+    return ()=>clearInterval(t);
+  },[]);
   const anlRef=useRef(null), rafRef=useRef(), stRef=useRef(), canRef=useRef();
 
   const start = async () => {
@@ -1351,7 +1370,18 @@ function ToolDecibeles() {
   const col=C.cyan;
   const [db,setDb]=useState(null), [peak,setPeak]=useState(null);
   const [on,setOn]=useState(false), [err,setErr]=useState(null);
-  const [history,setHistory]=useState([]); // últimas 60 lecturas para gráfica
+  const [history,setHistory]=useState([]);
+  // Demo mode
+  useEffect(()=>{
+    if(!isDemoMode()) return;
+    setOn(true);
+    const t=setInterval(()=>{
+      const v=Math.round(DEMO_GENERATORS.decibeles());
+      setDb(v); setPeak(p=>Math.max(p??0,v));
+      setHistory(h=>[...h.slice(-59),v]);
+    },300);
+    return ()=>clearInterval(t);
+  },[]); // últimas 60 lecturas para gráfica
   const [events,setEvents]=useState([]); // {db,dur,ts}
   const [thresh,setThresh]=useState(75);
   const anlRef=useRef(),rafRef=useRef(),stRef=useRef();
@@ -2830,6 +2860,18 @@ function ToolConductimetro() {
   return (
     <div style={S.wrap}>
       <div style={S.st(col)}>▸ Conductímetro — mS/cm</div>
+      <DemoBanner/>
+      {isDemoMode()&&!cond&&(()=>{
+        useEffect(()=>{
+          const t=setInterval(()=>{
+            const v=DEMO_GENERATORS.conductividad();
+            setCond(v.toFixed(3)); setRes(Math.round(10000/v));
+            setTrend(h=>[...h.slice(-59),v]);
+          },500);
+          return ()=>clearInterval(t);
+        },[]);
+        return null;
+      })()}
       {on&&<StopFAB onStop={stop} col={col}/>}
 
       {/* Hardware */}
@@ -4323,6 +4365,65 @@ function ModuleGate({ modName, modId, children }) {
   );
 }
 
+
+// ── MODO DEMO — simulación de todos los sensores ─────────────────────────────
+function isDemoMode() {
+  try { return localStorage.getItem("sem_demo_mode")==="1"; } catch(_e){ return false; }
+}
+
+// Generadores de datos realistas por tipo de sensor
+const DEMO_GENERATORS = {
+  decibeles:   () => 42 + Math.random()*15 + (Math.random()<0.05?20:0),
+  nivel_x:     () => (Math.random()-0.5)*2,
+  nivel_y:     () => (Math.random()-0.5)*2,
+  spo2:        () => 96 + Math.round(Math.random()*2),
+  bpm_cardiaco:() => 68 + Math.round(Math.random()*8),
+  temperatura: () => 36.4 + Math.random()*0.8,
+  conductividad:()=> 0.14 + Math.random()*0.04,
+  orp:         () => 340 + Math.random()*60,
+  ph:          () => 7.1 + Math.random()*0.3,
+  flujo_aire:  () => 0.03 + Math.random()*0.06,
+  voltaje:     () => 12.1 + Math.random()*0.4,
+  vibracion:   () => 0.05 + Math.random()*0.12,
+  luminosidad: () => 420 + Math.random()*80,
+  ecg_sample:  (t) => {
+    const T=1.0, x=(t%T)/T;
+    return 0.15*Math.exp(-((x-0.2)**2)/0.006)
+          +1.0*Math.exp(-((x-0.4)**2)/0.0006)
+          -0.15*Math.exp(-((x-0.43)**2)/0.0008)
+          +0.3*Math.exp(-((x-0.65)**2)/0.015)
+          +(Math.random()-0.5)*0.03;
+  },
+  sinal_cruda: () => (Math.random()-0.5)*0.8,
+};
+
+// Hook para datos de demo con actualización periódica
+function useDemoData(key, interval=300, transform=v=>v) {
+  const [val, setVal] = useState(()=>transform(DEMO_GENERATORS[key]?.() ?? 0));
+  useEffect(()=>{
+    if(!isDemoMode()) return;
+    const t=setInterval(()=>setVal(transform(DEMO_GENERATORS[key]?.() ?? 0)), interval);
+    return ()=>clearInterval(t);
+  }, [key, interval]);
+  return val;
+}
+
+// Banner de demo mode
+function DemoBanner() {
+  if(!isDemoMode()) return null;
+  return (
+    <div style={{
+      background:`rgba(${rgb(C.amber)},0.15)`,
+      border:`1px solid rgba(${rgb(C.amber)},0.4)`,
+      borderRadius:8, padding:"6px 12px", marginBottom:8,
+      display:"flex", alignItems:"center", gap:8,
+      fontFamily:MONO, fontSize:9, color:C.amber, fontWeight:700,
+    }}>
+      🎭 MODO DEMO — datos simulados · sin hardware real
+    </div>
+  );
+}
+
 // ── Sistema de calibración ────────────────────────────────────────────────────
 const CAL_DEFAULTS = {
   nivel:     { bOffset:0, gOffset:0 },          // offset acelerómetro
@@ -4706,8 +4807,9 @@ function ToolSistema() {
       })()}
       {/* Modo desarrollador — activa todos los módulos */}
       {(()=>{
-        const ALL_MODS=["aquapanel","ecgmodule","condmod","cloromod","tacolasr","oscilo2","comptest"];
+        const ALL_MODS=["aquapanel","ecgmodule","condmod","cloromod","tacolasr","oscilo2","comptest","spo2mod","irmodule","termocam","redcable"];
         const [devMode,setDevMode]=useState(()=>ALL_MODS.every(m=>isModActive(m)));
+        const [demoMode,setDemoMode]=useState(()=>isDemoMode());
         return (
           <div style={{...glass(C.amber,0.07),borderRadius:12,padding:"14px 16px",
             border:`1px solid rgba(${rgb(C.amber)},0.3)`}}>
@@ -4715,19 +4817,32 @@ function ToolSistema() {
               letterSpacing:2,marginBottom:8}}>🔧 MODO DESARROLLADOR</div>
             <div style={{fontFamily:MONO,fontSize:10,color:C.dim,lineHeight:1.7,marginBottom:10}}>
               Activa todos los módulos físicos para pruebas y desarrollo.
-              Desactivar antes de publicar la versión pública.
             </div>
-            <button style={{...S.btn(devMode?"r":"p",C.amber)}} onClick={()=>{
-              if(devMode){
-                ALL_MODS.forEach(m=>deactivateMod(m)); setDevMode(false);
-              } else {
-                ALL_MODS.forEach(m=>activateMod(m)); setDevMode(true);
-              }
+            <button style={{...S.btn(devMode?"r":"p",C.amber),marginBottom:8}} onClick={()=>{
+              if(devMode){ ALL_MODS.forEach(m=>deactivateMod(m)); setDevMode(false); }
+              else { ALL_MODS.forEach(m=>activateMod(m)); setDevMode(true); }
             }}>
-              {devMode?"🔒 Desactivar modo desarrollador":"🔓 Activar todos los módulos (dev)"}
+              {devMode?"🔒 Desactivar módulos":"🔓 Activar todos los módulos"}
             </button>
-            {devMode&&<div style={{fontFamily:MONO,fontSize:9,color:C.amber,marginTop:8}}>
-              ✓ Todos los módulos activos — ORP, pH, ECG, AquaPanel, etc.
+
+            <div style={{fontFamily:MONO,fontSize:9,color:C.violet,fontWeight:700,
+              letterSpacing:2,marginBottom:6,marginTop:4}}>🎭 MODO DEMO</div>
+            <div style={{fontFamily:MONO,fontSize:10,color:C.dim,lineHeight:1.7,marginBottom:8}}>
+              Simula todos los sensores con datos realistas — sin necesitar hardware.
+              Ideal para ver cómo queda cada herramienta antes de armar los módulos.
+            </div>
+            <button style={{...S.btn(demoMode?"r":"p",C.violet)}} onClick={()=>{
+              const next=!demoMode;
+              try{ localStorage.setItem("sem_demo_mode", next?"1":"0"); }catch(_e){}
+              if(!demoMode){ ALL_MODS.forEach(m=>activateMod(m)); setDevMode(true); }
+              setDemoMode(next);
+              window.location.reload();
+            }}>
+              {demoMode?"⏹ Salir del modo demo":"🎭 Activar modo demo (datos simulados)"}
+            </button>
+            {demoMode&&<div style={{fontFamily:MONO,fontSize:9,color:C.violet,marginTop:8,
+              background:`rgba(${rgb(C.violet)},0.1)`,borderRadius:6,padding:"6px 10px"}}>
+              ✓ Modo demo activo — todos los sensores simulados con datos realistas
             </div>}
           </div>
         );
