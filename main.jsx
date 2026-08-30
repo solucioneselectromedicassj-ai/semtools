@@ -4331,6 +4331,22 @@ function TimeChart({ data, col, unit="", height=80 }) {
 }
 
 
+
+// ── Botón de activación de módulo — componente separado (hooks válidos) ───────
+function ModuleActivateButton({ moduleId, col }) {
+  const [active, setActive] = useState(()=>isModActive(moduleId));
+  return (
+    <button style={{...S.btn(active?"r":"s"),display:"flex",alignItems:"center",
+      justifyContent:"center",gap:8}}
+      onClick={()=>{
+        if(active){ deactivateMod(moduleId); setActive(false); }
+        else { activateMod(moduleId); setActive(true); }
+      }}>
+      {active ? "🔒 Desactivar módulo" : "🔓 Tengo este módulo — Activar"}
+    </button>
+  );
+}
+
 // ── Sistema de módulos activables ────────────────────────────────────────────
 function getActiveMods() {
   try { return JSON.parse(localStorage.getItem("sem_active_mods")||"{}"); } catch(_e){ return {}; }
@@ -5033,25 +5049,13 @@ function ToolModulos() {
         )}
 
         {/* Botón activar módulo (requiere hardware físico) */}
-        {m.moduleId && (()=>{
-          const [active,setActive]=useState(()=>isModActive(m.moduleId));
-          return (
-            <button style={{...S.btn(active?"r":"s"),display:"flex",alignItems:"center",
-              justifyContent:"center",gap:8}}
-              onClick={()=>{
-                if(active){deactivateMod(m.moduleId);setActive(false);}
-                else{activateMod(m.moduleId);setActive(true);}
-              }}>
-              {active?"🔒 Desactivar módulo":"🔓 Tengo este módulo — Activar"}
-            </button>
-          );
-        })()}
+        {m.moduleId && <ModuleActivateButton moduleId={m.moduleId} col={m.col}/>}
 
         {m.status === "available" && !m.toolId
           ? <button style={S.btn("p", C.green)}>🛒  Consultar disponibilidad</button>
           : !m.toolId && <div style={S.tag(false)}>⏳  {st.label} — te avisamos cuando esté listo</div>
         }
-        <div style={S.note}>Los módulos son de fabricación local. Compatible con Android 8+ y iOS 14+. Sin drivers adicionales.</div>
+        <div style={S.note}>Compatible con Android 8+ y iOS 14+. Sin drivers ni instalaciones adicionales.</div>
       </div>
     );
   }
