@@ -2,6 +2,15 @@
   "installCommand": "npm install",
   "headers": [
     {
+      "source": "/(.*)",
+      "headers": [
+        {
+          "key": "Permissions-Policy",
+          "value": "ambient-light-sensor=*, accelerometer=*, gyroscope=*, magnetometer=*"
+        }
+      ]
+    },
+    {
       "source": "/assets/(.*)",
       "headers": [
         {
