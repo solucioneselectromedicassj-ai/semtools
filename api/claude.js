@@ -28,8 +28,11 @@ async function callAnthropic(messages, key) {
 }
 
 // ── Llamada a Gemini ──────────────────────────────────────────────────────────
+// Probamos primero el modelo "pro" (mejor para leer texto chico, como el marking
+// de un integrado) y vamos cayendo a modelos más livianos si no está disponible
+// en la key del usuario o si devuelve una respuesta vacía.
 const GEMINI_MODELS = [
-  ['v1beta','gemini-3.6-flash'],
+  ['v1beta','gemini-2.5-pro'],
   ['v1beta','gemini-2.5-flash'],
   ['v1beta','gemini-2.0-flash'],
   ['v1beta','gemini-2.0-flash-lite'],
@@ -46,24 +49,29 @@ async function callGemini(messages, key) {
     }
   }
 
+  let lastErr = 'No hay modelos Gemini disponibles para esta key';
   for (const [ver, model] of GEMINI_MODELS) {
     const url = `https://generativelanguage.googleapis.com/${ver}/models/${model}:generateContent?key=${key}`;
     const r = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ contents:[{ role:'user', parts }], generationConfig:{ maxOutputTokens:1000, temperature:0.3 } }),
+      body: JSON.stringify({ contents:[{ role:'user', parts }], generationConfig:{ maxOutputTokens:1200, temperature:0.2 } }),
     });
     let d; try { d = await r.json(); } catch(_e) { continue; }
     if (!r.ok) {
       const msg = d?.error?.message || '';
       if (msg.includes('API_KEY_INVALID') || msg.includes('API key not valid')) return { ok:false, error:'INVALID_KEY' };
+      lastErr = msg || lastErr;
       continue; // probar siguiente modelo
     }
     const text = d?.candidates?.[0]?.content?.parts?.[0]?.text || '';
-    if (text.includes('no longer available') || text.includes('please update your code')) continue;
+    // Respuesta vacía (bloqueo de seguridad, modelo sin cuota, etc.) → probar el siguiente modelo
+    // en vez de devolverle al usuario un resultado vacío como si fuera válido.
+    if (!text) { lastErr = 'Respuesta vacía del modelo ' + model; continue; }
+    if (text.includes('no longer available') || text.includes('please update your code')) { lastErr = text; continue; }
     return { ok:true, text };
   }
-  return { ok:false, error:'No hay modelos Gemini disponibles para esta key' };
+  return { ok:false, error:lastErr };
 }
 
 // ── Handler principal ─────────────────────────────────────────────────────────
