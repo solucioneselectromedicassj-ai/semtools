@@ -51,10 +51,17 @@ function CameraView({ captureLabel="📷 Capturar", onCapture }) {
   const start=useCallback(async()=>{
     try {
       stop();
-      const s=await navigator.mediaDevices.getUserMedia({video:{facingMode:"environment",width:{ideal:1280}}});
+      // Resolución alta + foco continuo: el OCR de la IA sobre el marking de un
+      // integrado necesita el máximo detalle posible — a 1280px muchos textos
+      // chicos quedan ilegibles.
+      const s=await navigator.mediaDevices.getUserMedia({video:{facingMode:"environment",width:{ideal:1920},height:{ideal:1080}}});
       vRef.current.srcObject=s; await vRef.current.play();
       const t=s.getVideoTracks()[0]; tkRef.current=t;
-      setTorchOk(!!(t.getCapabilities?.()?.torch));
+      const caps=t.getCapabilities?.()||{};
+      setTorchOk(!!caps.torch);
+      try{
+        if(caps.focusMode?.includes?.("continuous")) await t.applyConstraints({advanced:[{focusMode:"continuous"}]});
+      }catch(_e){}
       setOn(true); setErr(null);
     } catch(e){ setErr("Sin cámara: "+e.message); }
   },[stop]);
@@ -70,7 +77,8 @@ function CameraView({ captureLabel="📷 Capturar", onCapture }) {
     const v=vRef.current,c=cRef.current; if(!v||!c) return;
     c.width=v.videoWidth||640; c.height=v.videoHeight||480;
     c.getContext("2d").drawImage(v,0,0);
-    onCapture?.(c.toDataURL("image/jpeg",0.85).split(",")[1], c);
+    // Calidad JPEG más alta — importante para que la IA pueda leer el marking chico.
+    onCapture?.(c.toDataURL("image/jpeg",0.92).split(",")[1], c);
   };
 
   useEffect(()=>()=>stop(),[stop]);
