@@ -28,13 +28,55 @@ function ToolResistencias() {
 }
 
 // ── Integrados ────────────────────────────────────────────────────────────────
+// Extrae el valor de un campo "ETIQUETA: valor" de la respuesta estructurada de la IA.
+function extractField(text, label) {
+  if (!text) return null;
+  const re = new RegExp(label.replace(/[.*+?^${}()|[\]\\]/g,"\\$&") + "\\s*:\\s*(.+)", "i");
+  const m = text.match(re);
+  return m ? m[1].trim() : null;
+}
+
+const INTEGRADO_PROMPT =
+  "Sos un técnico electrónico experto identificando integrados (ICs) a partir de una foto tomada con un celular. " +
+  "La foto puede tener baja resolución, reflejos, polvo o el marking parcialmente borrado. Sé honesto sobre la incertidumbre: " +
+  "NUNCA inventes un part number específico con falsa certeza si no podés leerlo con confianza — es preferible decir que no estás seguro " +
+  "antes que dar un dato incorrecto a un técnico que va a confiar en él.\n\n" +
+  "Respondé EXACTAMENTE en este formato, una línea por campo:\n" +
+  "MARKING LEIDO: [transcribí EXACTAMENTE los caracteres que ves en el chip, línea por línea separadas por /; usá ? para cualquier carácter que no puedas distinguir con certeza; si no hay texto legible escribí NO LEGIBLE]\n" +
+  "CONFIANZA: [ALTA / MEDIA / BAJA — qué tan seguro estás de la lectura del marking]\n" +
+  "COMPONENTE: [nombre o part number más probable según el marking; si CONFIANZA es BAJA listá 2-3 candidatos posibles separados por ' o ' en vez de afirmar uno solo]\n" +
+  "FUNCION: [qué hace este tipo de componente, en 1-2 líneas]\n" +
+  "ENCAPSULADO: [tipo de paquete que VES en la foto — DIP-8, SOIC-16, TO-220, etc. — y cantidad de pines; esto es más confiable que leer el texto]\n" +
+  "PINES CLAVE: [si identificás el componente con CONFIANZA ALTA o MEDIA: función de los pines más importantes, ej Pin1=VCC, Pin4=GND; si no, escribí DESCONOCIDO]\n" +
+  "COMO PROBARLO: [pasos concretos para un técnico con multímetro u osciloscopio]\n" +
+  "EQUIVALENTE: [reemplazo común si existe, o NINGUNO]\n" +
+  "BUSQUEDA SUGERIDA: [la mejor cadena de búsqueda en inglés para encontrar el datasheet — normalmente el marking o part number más probable, sin la palabra datasheet]\n" +
+  "Si la foto no muestra ningún componente: SIN COMPONENTE";
+
+function buildIntegradoLinks(text) {
+  const raw = extractField(text,"BUSQUEDA SUGERIDA") || extractField(text,"COMPONENTE") || extractField(text,"MARKING LEIDO");
+  if (!raw) return null;
+  const clean = raw.replace(/\?/g,"").replace(/\bNO LEGIBLE\b/i,"").replace(/\bDESCONOCIDO\b/i,"").trim();
+  if (!clean || /SIN COMPONENTE/i.test(clean)) return null;
+  const query = encodeURIComponent(clean.split(/\s+o\s+/i)[0].trim());
+  return {
+    datasheet: `https://www.google.com/search?q=${query}+datasheet+pdf`,
+    pinout:    `https://www.google.com/search?tbm=isch&q=${query}+pinout+diagram`,
+    octopart:  `https://octopart.com/search?q=${query}`,
+  };
+}
+
 function ToolIntegrado() {
   const col=C.violet;
   const [loading,setLoading]=useState(false), [result,setResult]=useState(null);
+  const [photo,setPhoto]=useState(null), [links,setLinks]=useState(null);
   const analyze=async b64=>{
-    setLoading(true); setResult(null);
-    try{ setResult(await askClaude(b64,
-      "Analizá este IC/integrado.\nMARKING: [texto en chip]\nCOMPONENTE: [nombre]\nFUNCIÓN: [breve]\nENCAPSULADO: [tipo y pines]\nCÓMO PROBARLO:\n[pasos para técnico]\nEQUIVALENTE: [si existe]\nSi no hay componente: SIN COMPONENTE"));
+    setLoading(true); setResult(null); setLinks(null);
+    setPhoto("data:image/jpeg;base64,"+b64);
+    try{
+      const text = await askClaude(b64, INTEGRADO_PROMPT);
+      setResult(text);
+      setLinks(buildIntegradoLinks(text));
     } catch(e){ setResult(e.message==="NO_KEY"?"🔑 Configurá tu API key de Gemini (botón 🔑 arriba)":e.message==="INVALID_KEY"?"🔑 API key inválida — tocá 🔑 para reconfigurar":"⚠ "+e.message); }
     setLoading(false);
   };
@@ -42,10 +84,37 @@ function ToolIntegrado() {
     <div style={S.wrap}>
       <div style={S.st(col)}>▸ Identificador de IC</div>
       <CameraView captureLabel={loading?"Identificando…":"📷 Identificar IC"} onCapture={loading?null:analyze}/>
+      {photo && (
+        <div style={{display:"flex",gap:10,alignItems:"flex-start"}}>
+          <img src={photo} alt="Foto enviada a la IA" style={{width:92,borderRadius:8,border:`1px solid rgba(${rgb(col)},0.3)`,flexShrink:0}}/>
+          <div style={{fontFamily:MONO,fontSize:9,color:C.dim,lineHeight:1.7}}>
+            Esta es la foto que se envió a la IA. Si el marking salió borroso, con reflejo o muy chico, acercá más la cámara, mejorá la luz y volvé a capturar.
+          </div>
+        </div>
+      )}
       {result&&<div style={S.res(col)}>
         <pre style={{fontFamily:MONO,fontSize:12,color:C.text,whiteSpace:"pre-wrap",margin:0,lineHeight:1.9}}>{result}</pre>
       </div>}
-      <div style={S.note}>Enfocá el marking del chip con buena luz.</div>
+      {links && (
+        <div style={{display:"flex",flexDirection:"column",gap:8}}>
+          <a href={links.datasheet} target="_blank" rel="noreferrer"
+            style={{...S.btn("s"),textDecoration:"none",display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
+            📄 Buscar datasheet
+          </a>
+          <a href={links.pinout} target="_blank" rel="noreferrer"
+            style={{...S.btn("s"),textDecoration:"none",display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
+            🖼 Ver diagrama de conexión / pines
+          </a>
+          <a href={links.octopart} target="_blank" rel="noreferrer"
+            style={{...S.btn("s"),textDecoration:"none",display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
+            🔍 Buscar en Octopart
+          </a>
+        </div>
+      )}
+      <div style={S.note}>
+        Enfocá bien de cerca el marking, con buena luz y sin reflejos — eso es lo que más mejora el resultado.
+        Si la IA no está segura te lo va a decir en CONFIANZA; usá los enlaces de arriba para confirmar con el datasheet real antes de dar el componente por bueno.
+      </div>
     </div>
   );
 }
