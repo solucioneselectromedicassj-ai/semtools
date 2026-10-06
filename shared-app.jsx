@@ -32,6 +32,8 @@ const TOOL_NEEDS = {
   resistencias: { needs:["camera","ai"],             label:"Resistencias"       },
   integrados:   { needs:["camera","ai"],             label:"Integrados IC"      },
   distancia:    { needs:["camera"],                  label:"Distancia"          },
+  lupa:         { needs:["camera"],                  label:"Lupa"               },
+  ocr:          { needs:["camera","ai"],             label:"Escáner de Texto"   },
   jack_thermo:  { needs:["microphone","jack"],       label:"Temperatura"        },
   jack_thermo2: { needs:["microphone","jack"],       label:"Dual Temp"          },
   jack_air:     { needs:["microphone","jack"],       label:"Flujo Aire"         },
