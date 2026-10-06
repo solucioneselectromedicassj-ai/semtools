@@ -12,6 +12,7 @@ import { ToolSistema } from "./tools-7.jsx";
 import { ToolDispositivo, ToolModulos } from "./tools-8.jsx";
 import { ToolEndoscopio, ToolQR } from "./tools-9.jsx";
 import { ToolIR, ToolNFC } from "./tools-10.jsx";
+import { ToolLupa, ToolOCR } from "./tools-11.jsx";
 
 function Home({onSel, caps}) {
   const [sector,setSector]=React.useState(null);
@@ -114,6 +115,8 @@ function getView(tool) {
     case "resistencias":  return <ToolResistencias key={tool}/>;
     case "integrados":    return <ToolIntegrado key={tool}/>;
     case "distancia":     return <ToolDistancia key={tool}/>;
+    case "lupa":          return <ToolLupa key={tool}/>;
+    case "ocr":           return <ToolOCR key={tool}/>;
     case "decibeles":     return <ToolDecibeles key={tool}/>;
     case "nivel":         return <ToolNivel key={tool}/>;
     case "brujula":       return <ToolBrujula key={tool}/>;
