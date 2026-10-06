@@ -51,6 +51,8 @@ const SVG_PATHS = {
   dispositivo:  ["M4 4h16v16H4z","M9 9h6v6H9z","M9 1v3","M15 1v3","M9 20v3","M15 20v3","M1 9h3","M1 15h3","M20 9h3","M20 15h3"],
   lan:          ["M9 3H5a2 2 0 0 0-2 2v4","M9 3h6","M15 3h4a2 2 0 0 1 2 2v4","M9 21H5a2 2 0 0 1-2-2v-4","M9 21h6","M15 21h4a2 2 0 0 0 2-2v-4","M3 9h18","M3 15h18"],
   nfc:          ["M3 7V5a2 2 0 0 1 2-2h2","M17 3h2a2 2 0 0 1 2 2v2","M21 17v2a2 2 0 0 1-2 2h-2","M7 21H5a2 2 0 0 1-2-2v-2","M12 12m-2 0a2 2 0 1 0 4 0 2 2 0 0 0-4 0","M8 8a6 6 0 0 0 0 8","M16 8a6 6 0 0 1 0 8"],
+  lupa:         ["M11 2a9 9 0 1 0 0 18 9 9 0 0 0 0-18z","M21 21l-4.35-4.35"],
+  ocr:          ["M4 7V4h3","M17 4h3v3","M20 17v3h-3","M7 20H4v-3","M8 9h8","M8 13h8","M8 17h5"],
 };
 
 function ToolIcon({ id, size=26, color, strokeWidth=1.6, style={} }) {
@@ -87,6 +89,8 @@ const TOOL = {
   resistencias: { icon:"🔴", label:"Resistencias",    sub:"Cámara + IA → valor Ω",               col:C.violet },
   integrados:   { icon:"◻",  label:"Integrados IC",   sub:"Cámara + IA → ID + cómo probarlo",    col:C.violet },
   distancia:    { icon:"📏", label:"Distancia",       sub:"IA o medición por toque",              col:C.violet },
+  lupa:         { icon:"🔍", label:"Lupa",            sub:"Zoom digital · linterna · congelar imagen", col:C.amber },
+  ocr:          { icon:"📄", label:"Escáner de Texto", sub:"Cámara + IA → transcribe texto/series", col:C.green  },
   jack_thermo:  { icon:"🌡",  label:"Temperatura",    sub:"NTC · °C en tiempo real",               col:C.orange },
   jack_thermo2: { icon:"🌡🌡",label:"Dual Temp",       sub:"2 sondas NTC · diferencial",            col:C.red    },
   jack_air:     { icon:"💨", label:"Flujo de aire",    sub:"Anemómetro térmico · m/s",              col:C.blue   },
@@ -107,7 +111,7 @@ const TOOL = {
 
 const BLOCKS = [
   { id:"celular",  icon:"📱", label:"CELULAR",     col:C.cyan,   tools:["decibeles","nivel","brujula","oscilo","vibro","espectro","generador","ecggen","sistema","dispositivo","qr","ir","nfc"] },
-  { id:"camara",   icon:"📷", label:"CÁMARA + IA", col:C.violet, tools:["resistencias","integrados","distancia","endoscopio","ppg","cloro"] },
+  { id:"camara",   icon:"📷", label:"CÁMARA + IA", col:C.violet, tools:["resistencias","integrados","distancia","endoscopio","lupa","ocr","ppg","cloro"] },
   { id:"jack",     icon:"🔌", label:"JACK 3.5mm",  col:C.orange, tools:["jack_thermo","jack_thermo2","jack_air","jack_volt","jack_light","jack_raw","spo2","ecg","conductimetro","orp","phjack"] },
   { id:"celularplus", icon:"📶", label:"CONECTIVIDAD", col:C.blue, tools:["red","ping","lan","http","ble","ipinfo","usbprobe"] },
   { id:"modulos",  icon:"📡", label:"MÓDULOS",     col:C.green,  tools:["modulos"] },
