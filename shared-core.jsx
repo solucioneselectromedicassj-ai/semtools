@@ -54,6 +54,9 @@ const SVG_PATHS = {
   lupa:         ["M11 2a9 9 0 1 0 0 18 9 9 0 0 0 0-18z","M21 21l-4.35-4.35"],
   ocr:          ["M4 7V4h3","M17 4h3v3","M20 17v3h-3","M7 20H4v-3","M8 9h8","M8 13h8","M8 17h5"],
   convertidor:  ["M7 16V4","M7 4L3 8","M7 4l4 4","M17 8v12","M17 20l4-4","M17 20l-4-4"],
+  transportador:["M4 18a8 8 0 0 1 16 0","M4 18h16","M12 18V9"],
+  cronometro:   ["M12 22a8 8 0 1 0 0-16 8 8 0 0 0 0 16z","M12 10v4l3 2","M9 2h6","M12 2v2"],
+  metales:      ["M6 4v6a6 6 0 0 0 12 0V4","M6 4h4","M14 4h4","M6 10h4","M14 10h4"],
 };
 
 function ToolIcon({ id, size=26, color, strokeWidth=1.6, style={} }) {
@@ -84,6 +87,9 @@ const TOOL = {
   sistema:      { icon:"🔧", label:"Sistema",         sub:"Limpieza · benchmark · optimización",   col:C.cyan   },
   dispositivo:  { icon:"📟", label:"Dispositivo & Sensores", sub:"Info del equipo · sensores en vivo · compatibilidad", col:C.blue },
   convertidor:  { icon:"🔁", label:"Convertidor de Unidades", sub:"Temperatura · presión · flujo · longitud y más", col:C.blue },
+  transportador:{ icon:"📐", label:"Transportador",   sub:"Ángulo en vivo · acelerómetro",        col:C.amber  },
+  cronometro:   { icon:"⏱", label:"Cronómetro",       sub:"Cronómetro + temporizador con vueltas", col:C.cyan   },
+  metales:      { icon:"🧲", label:"Detector de Metales", sub:"Magnetómetro · sonido + vibración", col:C.violet },
   endoscopio:   { icon:"🔭", label:"Cámara / Endoscopio",sub:"USB · foto · video · linterna",        col:C.blue   },
   qr:           { icon:"⬛", label:"QR / Código Barras",sub:"Leer · generar · historial",           col:C.green  },
   ir:           { icon:"📡", label:"Control Remoto",  sub:"Detector IR · LAN · módulo TX",         col:C.violet },
@@ -112,7 +118,7 @@ const TOOL = {
 };
 
 const BLOCKS = [
-  { id:"celular",  icon:"📱", label:"CELULAR",     col:C.cyan,   tools:["decibeles","nivel","brujula","oscilo","vibro","espectro","generador","ecggen","sistema","dispositivo","convertidor","qr","ir","nfc"] },
+  { id:"celular",  icon:"📱", label:"CELULAR",     col:C.cyan,   tools:["decibeles","nivel","brujula","oscilo","vibro","espectro","generador","ecggen","sistema","dispositivo","convertidor","transportador","cronometro","metales","qr","ir","nfc"] },
   { id:"camara",   icon:"📷", label:"CÁMARA + IA", col:C.violet, tools:["resistencias","integrados","distancia","endoscopio","lupa","ocr","ppg","cloro"] },
   { id:"jack",     icon:"🔌", label:"JACK 3.5mm",  col:C.orange, tools:["jack_thermo","jack_thermo2","jack_air","jack_volt","jack_light","jack_raw","spo2","ecg","conductimetro","orp","phjack"] },
   { id:"celularplus", icon:"📶", label:"CONECTIVIDAD", col:C.blue, tools:["red","ping","lan","http","ble","ipinfo","usbprobe"] },
