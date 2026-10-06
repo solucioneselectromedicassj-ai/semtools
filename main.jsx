@@ -14,6 +14,7 @@ import { ToolEndoscopio, ToolQR } from "./tools-9.jsx";
 import { ToolIR, ToolNFC } from "./tools-10.jsx";
 import { ToolLupa, ToolOCR } from "./tools-11.jsx";
 import { ToolConvertidor } from "./tools-12.jsx";
+import { ToolCronometro, ToolDetectorMetales, ToolTransportador } from "./tools-13.jsx";
 
 function Home({onSel, caps}) {
   const [sector,setSector]=React.useState(null);
@@ -119,6 +120,9 @@ function getView(tool) {
     case "lupa":          return <ToolLupa key={tool}/>;
     case "ocr":           return <ToolOCR key={tool}/>;
     case "convertidor":   return <ToolConvertidor key={tool}/>;
+    case "transportador": return <ToolTransportador key={tool}/>;
+    case "cronometro":    return <ToolCronometro key={tool}/>;
+    case "metales":       return <ToolDetectorMetales key={tool}/>;
     case "decibeles":     return <ToolDecibeles key={tool}/>;
     case "nivel":         return <ToolNivel key={tool}/>;
     case "brujula":       return <ToolBrujula key={tool}/>;
