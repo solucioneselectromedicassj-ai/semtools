@@ -25,6 +25,7 @@ const TOOL_NEEDS = {
   nfc:          { needs:["nfc"],                     label:"NFC"                },
   sistema:      { needs:[],                          label:"Sistema"            },
   dispositivo:  { needs:[],                          label:"Dispositivo & Sensores" },
+  convertidor:  { needs:[],                          label:"Convertidor de Unidades" },
   qr:           { needs:["camera"],                  label:"QR / Código Barras" },
   ir:           { needs:["camera"],                  label:"Control Remoto IR"  },
   endoscopio:   { needs:["camera"],                  label:"Endoscopio / USB"   },
