@@ -53,6 +53,7 @@ const SVG_PATHS = {
   nfc:          ["M3 7V5a2 2 0 0 1 2-2h2","M17 3h2a2 2 0 0 1 2 2v2","M21 17v2a2 2 0 0 1-2 2h-2","M7 21H5a2 2 0 0 1-2-2v-2","M12 12m-2 0a2 2 0 1 0 4 0 2 2 0 0 0-4 0","M8 8a6 6 0 0 0 0 8","M16 8a6 6 0 0 1 0 8"],
   lupa:         ["M11 2a9 9 0 1 0 0 18 9 9 0 0 0 0-18z","M21 21l-4.35-4.35"],
   ocr:          ["M4 7V4h3","M17 4h3v3","M20 17v3h-3","M7 20H4v-3","M8 9h8","M8 13h8","M8 17h5"],
+  convertidor:  ["M7 16V4","M7 4L3 8","M7 4l4 4","M17 8v12","M17 20l4-4","M17 20l-4-4"],
 };
 
 function ToolIcon({ id, size=26, color, strokeWidth=1.6, style={} }) {
@@ -82,6 +83,7 @@ const TOOL = {
   brujula:      { icon:"🧭", label:"Brújula",         sub:"Magnetómetro · rumbo · auto-start",    col:C.cyan   },
   sistema:      { icon:"🔧", label:"Sistema",         sub:"Limpieza · benchmark · optimización",   col:C.cyan   },
   dispositivo:  { icon:"📟", label:"Dispositivo & Sensores", sub:"Info del equipo · sensores en vivo · compatibilidad", col:C.blue },
+  convertidor:  { icon:"🔁", label:"Convertidor de Unidades", sub:"Temperatura · presión · flujo · longitud y más", col:C.blue },
   endoscopio:   { icon:"🔭", label:"Cámara / Endoscopio",sub:"USB · foto · video · linterna",        col:C.blue   },
   qr:           { icon:"⬛", label:"QR / Código Barras",sub:"Leer · generar · historial",           col:C.green  },
   ir:           { icon:"📡", label:"Control Remoto",  sub:"Detector IR · LAN · módulo TX",         col:C.violet },
@@ -110,7 +112,7 @@ const TOOL = {
 };
 
 const BLOCKS = [
-  { id:"celular",  icon:"📱", label:"CELULAR",     col:C.cyan,   tools:["decibeles","nivel","brujula","oscilo","vibro","espectro","generador","ecggen","sistema","dispositivo","qr","ir","nfc"] },
+  { id:"celular",  icon:"📱", label:"CELULAR",     col:C.cyan,   tools:["decibeles","nivel","brujula","oscilo","vibro","espectro","generador","ecggen","sistema","dispositivo","convertidor","qr","ir","nfc"] },
   { id:"camara",   icon:"📷", label:"CÁMARA + IA", col:C.violet, tools:["resistencias","integrados","distancia","endoscopio","lupa","ocr","ppg","cloro"] },
   { id:"jack",     icon:"🔌", label:"JACK 3.5mm",  col:C.orange, tools:["jack_thermo","jack_thermo2","jack_air","jack_volt","jack_light","jack_raw","spo2","ecg","conductimetro","orp","phjack"] },
   { id:"celularplus", icon:"📶", label:"CONECTIVIDAD", col:C.blue, tools:["red","ping","lan","http","ble","ipinfo","usbprobe"] },
