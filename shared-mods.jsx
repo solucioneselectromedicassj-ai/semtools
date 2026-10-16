@@ -147,6 +147,13 @@ function isDemoMode() {
   try { return localStorage.getItem("sem_demo_mode")==="1"; } catch(_e){ return false; }
 }
 
+// ── MODO DESARROLLADOR — paneles internos de prueba, ocultos en producción ───
+// Se activa solo visitando la app con ?devmode=1 (ver main.jsx). No hay botón
+// público para activarlo: evita exponer herramientas sin terminar a usuarios reales.
+function isDevMode() {
+  try { return localStorage.getItem("sem_devmode")==="1"; } catch(_e){ return false; }
+}
+
 // Generadores de datos realistas por tipo de sensor
 const DEMO_GENERATORS = {
   decibeles:   () => 42 + Math.random()*15 + (Math.random()<0.05?20:0),
@@ -268,4 +275,4 @@ function CalPanel({ title, children, onReset, onClose }) {
   );
 }
 
-export { CAL_DEFAULTS, CalButton, CalPanel, DEMO_GENERATORS, DemoBanner, ModuleActivateButton, ModuleGate, TimeChart, activateMod, deactivateMod, detectBrand, getActiveMods, getCal, isDemoMode, isModActive, resetCal, saveCal, useDemoData, useModule };
+export { CAL_DEFAULTS, CalButton, CalPanel, DEMO_GENERATORS, DemoBanner, ModuleActivateButton, ModuleGate, TimeChart, activateMod, deactivateMod, detectBrand, getActiveMods, getCal, isDemoMode, isDevMode, isModActive, resetCal, saveCal, useDemoData, useModule };
