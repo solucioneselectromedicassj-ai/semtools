@@ -3,13 +3,13 @@ import ReactDOM from "react-dom/client";
 import { BLOCKS, C, MONO, S, SVG_PATHS, TOOL, ToolIcon, VERSION, rgb } from "./shared-core.jsx";
 import { Onboarding } from "./shared-api.jsx";
 import { ErrorBoundary, ModulePlaceholder, TOOL_NEEDS } from "./shared-app.jsx";
-import { ToolDistancia, ToolIntegrado, ToolJackSensor, ToolResistencias } from "./tools-1.jsx";
+import { ToolDistancia, ToolIntegrado, ToolResistencias } from "./tools-1.jsx";
 import { ToolDecibeles, ToolNivel } from "./tools-2.jsx";
 import { ToolBrujula, ToolOscilo } from "./tools-3.jsx";
 import { ToolUSBProbe } from "./tools-5.jsx";
 import { ToolBLEScanner, ToolHTTPTester, ToolIPInfo, ToolLANScanner, ToolPing, ToolRed } from "./tools-6.jsx";
 import { ToolSistema } from "./tools-7.jsx";
-import { ToolDispositivo, ToolModulos } from "./tools-8.jsx";
+import { ToolDispositivo } from "./tools-8.jsx";
 import { ToolEndoscopio, ToolQR } from "./tools-9.jsx";
 import { ToolIR, ToolNFC } from "./tools-10.jsx";
 import { ToolLupa, ToolOCR } from "./tools-11.jsx";
@@ -140,13 +140,6 @@ function getView(tool) {
     case "ir":            return <ToolIR key={tool}/>;
     case "endoscopio":    return <ToolEndoscopio key={tool}/>;
     case "usbprobe":      return <ToolUSBProbe key={tool}/>;
-    case "modulos":       return <ToolModulos key={tool}/>;
-    case "jack_thermo":   return <ToolJackSensor key={tool} modId="jack_thermo"/>;
-    case "jack_thermo2":  return <ToolJackSensor key={tool} modId="jack_thermo2"/>;
-    case "jack_air":      return <ToolJackSensor key={tool} modId="jack_air"/>;
-    case "jack_volt":     return <ToolJackSensor key={tool} modId="jack_volt"/>;
-    case "jack_light":    return <ToolJackSensor key={tool} modId="jack_light"/>;
-    case "jack_raw":      return <ToolJackSensor key={tool} modId="jack_raw"/>;
     case "tacometro":
       return <ModulePlaceholder key={tool} icon="⚙️" title="Tacómetro Estroboscópico"
         why={"El efecto estroboscópico puede desencadenar convulsiones.\nRequiere módulo externo con LED controlado."}
