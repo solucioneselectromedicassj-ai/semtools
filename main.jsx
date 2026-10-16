@@ -160,6 +160,7 @@ function App() {
       const ALL_MODS=["aquapanel","ecgmodule","condmod","cloromod","tacolasr","oscilo2","comptest","spo2mod","irmodule","termocam","redcable"];
       const m={}; ALL_MODS.forEach(id=>m[id]=true);
       try{ localStorage.setItem("sem_active_mods", JSON.stringify(m)); }catch(_e){}
+      try{ localStorage.setItem("sem_devmode", "1"); }catch(_e){}
       // Limpiar el parámetro de la URL
       window.history.replaceState({}, "", window.location.pathname);
     }
