@@ -2,6 +2,8 @@ import React, { useState, useEffect, useRef, useCallback } from "react";
 import { C, MONO, S, glass, rgb } from "./shared-core.jsx";
 import { CAL_DEFAULTS, activateMod, deactivateMod, detectBrand, getCal, isDemoMode, isDevMode, isModActive, resetCal } from "./shared-mods.jsx";
 
+const DEV_ALL_MODS=["aquapanel","ecgmodule","condmod","cloromod","tacolasr","oscilo2","comptest","spo2mod","irmodule","termocam","redcable"];
+
 function ToolSistema() {
   const col = C.cyan;
   const [storage,  setStorage]  = useState(null);
@@ -11,6 +13,8 @@ function ToolSistema() {
   const [cleanMsg, setCleanMsg] = useState(null);
   const [benchRun, setBenchRun] = useState(false);
   const [open,     setOpen]     = useState({bat:false,mem:false,storage:false,net:false});
+  const [devMode,  setDevMode]  = useState(()=>DEV_ALL_MODS.every(m=>isModActive(m)));
+  const [demoMode, setDemoMode] = useState(()=>isDemoMode());
 
   const conn = navigator.connection || navigator.mozConnection || null;
 
@@ -316,47 +320,42 @@ function ToolSistema() {
       })()}
       {/* Modo desarrollador — activa todos los módulos. Oculto en producción:
           solo visible si la app fue abierta con ?devmode=1 (ver main.jsx). */}
-      {isDevMode() && (()=>{
-        const ALL_MODS=["aquapanel","ecgmodule","condmod","cloromod","tacolasr","oscilo2","comptest","spo2mod","irmodule","termocam","redcable"];
-        const [devMode,setDevMode]=useState(()=>ALL_MODS.every(m=>isModActive(m)));
-        const [demoMode,setDemoMode]=useState(()=>isDemoMode());
-        return (
-          <div style={{...glass(C.amber,0.07),borderRadius:12,padding:"14px 16px",
-            border:`1px solid rgba(${rgb(C.amber)},0.3)`}}>
-            <div style={{fontFamily:MONO,fontSize:9,color:C.amber,fontWeight:700,
-              letterSpacing:2,marginBottom:8}}>🔧 MODO DESARROLLADOR</div>
-            <div style={{fontFamily:MONO,fontSize:10,color:C.dim,lineHeight:1.7,marginBottom:10}}>
-              Activa todos los módulos físicos para pruebas y desarrollo.
-            </div>
-            <button style={{...S.btn(devMode?"r":"p",C.amber),marginBottom:8}} onClick={()=>{
-              if(devMode){ ALL_MODS.forEach(m=>deactivateMod(m)); setDevMode(false); }
-              else { ALL_MODS.forEach(m=>activateMod(m)); setDevMode(true); }
-            }}>
-              {devMode?"🔒 Desactivar módulos":"🔓 Activar todos los módulos"}
-            </button>
-
-            <div style={{fontFamily:MONO,fontSize:9,color:C.violet,fontWeight:700,
-              letterSpacing:2,marginBottom:6,marginTop:4}}>🎭 MODO DEMO</div>
-            <div style={{fontFamily:MONO,fontSize:10,color:C.dim,lineHeight:1.7,marginBottom:8}}>
-              Simula todos los sensores con datos realistas — sin necesitar hardware.
-              Ideal para ver cómo queda cada herramienta antes de armar los módulos.
-            </div>
-            <button style={{...S.btn(demoMode?"r":"p",C.violet)}} onClick={()=>{
-              const next=!demoMode;
-              try{ localStorage.setItem("sem_demo_mode", next?"1":"0"); }catch(_e){}
-              if(!demoMode){ ALL_MODS.forEach(m=>activateMod(m)); setDevMode(true); }
-              setDemoMode(next);
-              window.location.reload();
-            }}>
-              {demoMode?"⏹ Salir del modo demo":"🎭 Activar modo demo (datos simulados)"}
-            </button>
-            {demoMode&&<div style={{fontFamily:MONO,fontSize:9,color:C.violet,marginTop:8,
-              background:`rgba(${rgb(C.violet)},0.1)`,borderRadius:6,padding:"6px 10px"}}>
-              ✓ Modo demo activo — todos los sensores simulados con datos realistas
-            </div>}
+      {isDevMode() && (
+        <div style={{...glass(C.amber,0.07),borderRadius:12,padding:"14px 16px",
+          border:`1px solid rgba(${rgb(C.amber)},0.3)`}}>
+          <div style={{fontFamily:MONO,fontSize:9,color:C.amber,fontWeight:700,
+            letterSpacing:2,marginBottom:8}}>🔧 MODO DESARROLLADOR</div>
+          <div style={{fontFamily:MONO,fontSize:10,color:C.dim,lineHeight:1.7,marginBottom:10}}>
+            Activa todos los módulos físicos para pruebas y desarrollo.
           </div>
-        );
-      })()}
+          <button style={{...S.btn(devMode?"r":"p",C.amber),marginBottom:8}} onClick={()=>{
+            if(devMode){ DEV_ALL_MODS.forEach(m=>deactivateMod(m)); setDevMode(false); }
+            else { DEV_ALL_MODS.forEach(m=>activateMod(m)); setDevMode(true); }
+          }}>
+            {devMode?"🔒 Desactivar módulos":"🔓 Activar todos los módulos"}
+          </button>
+
+          <div style={{fontFamily:MONO,fontSize:9,color:C.violet,fontWeight:700,
+            letterSpacing:2,marginBottom:6,marginTop:4}}>🎭 MODO DEMO</div>
+          <div style={{fontFamily:MONO,fontSize:10,color:C.dim,lineHeight:1.7,marginBottom:8}}>
+            Simula todos los sensores con datos realistas — sin necesitar hardware.
+            Ideal para ver cómo queda cada herramienta antes de armar los módulos.
+          </div>
+          <button style={{...S.btn(demoMode?"r":"p",C.violet)}} onClick={()=>{
+            const next=!demoMode;
+            try{ localStorage.setItem("sem_demo_mode", next?"1":"0"); }catch(_e){}
+            if(!demoMode){ DEV_ALL_MODS.forEach(m=>activateMod(m)); setDevMode(true); }
+            setDemoMode(next);
+            window.location.reload();
+          }}>
+            {demoMode?"⏹ Salir del modo demo":"🎭 Activar modo demo (datos simulados)"}
+          </button>
+          {demoMode&&<div style={{fontFamily:MONO,fontSize:9,color:C.violet,marginTop:8,
+            background:`rgba(${rgb(C.violet)},0.1)`,borderRadius:6,padding:"6px 10px"}}>
+            ✓ Modo demo activo — todos los sensores simulados con datos realistas
+          </div>}
+        </div>
+      )}
 
       {/* Diagnóstico de hardware desde Sistema */}
       <div style={{...glass(C.cyan,0.06),borderRadius:12,padding:"14px 16px",
