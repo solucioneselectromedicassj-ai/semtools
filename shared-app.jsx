@@ -38,12 +38,6 @@ const TOOL_NEEDS = {
   distancia:    { needs:["camera"],                  label:"Distancia"          },
   lupa:         { needs:["camera"],                  label:"Lupa"               },
   ocr:          { needs:["camera","ai"],             label:"Escáner de Texto"   },
-  jack_thermo:  { needs:["microphone","jack"],       label:"Temperatura"        },
-  jack_thermo2: { needs:["microphone","jack"],       label:"Dual Temp"          },
-  jack_air:     { needs:["microphone","jack"],       label:"Flujo Aire"         },
-  jack_volt:    { needs:["microphone","jack"],       label:"Voltaje CC"         },
-  jack_light:   { needs:["microphone","jack"],       label:"Luminosidad"        },
-  jack_raw:     { needs:["microphone","jack"],       label:"Señal Cruda"        },
   red:          { needs:[],                          label:"Red / Internet"     },
   ping:         { needs:[],                          label:"Ping"               },
   lan:          { needs:[],                          label:"Escáner LAN"        },
@@ -51,7 +45,6 @@ const TOOL_NEEDS = {
   ble:          { needs:[],                          label:"Scanner BLE"        },
   ipinfo:       { needs:[],                          label:"IP / ISP"           },
   usbprobe:     { needs:[],                          label:"USB-C Probe"        },
-  modulos:      { needs:[],                          label:"Módulos"            },
   tacometro:    { needs:[],                          label:"Tacómetro"          },
 };
 
