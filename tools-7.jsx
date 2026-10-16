@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { C, MONO, S, glass, rgb } from "./shared-core.jsx";
-import { CAL_DEFAULTS, activateMod, deactivateMod, detectBrand, getCal, isDemoMode, isModActive, resetCal } from "./shared-mods.jsx";
+import { CAL_DEFAULTS, activateMod, deactivateMod, detectBrand, getCal, isDemoMode, isDevMode, isModActive, resetCal } from "./shared-mods.jsx";
 
 function ToolSistema() {
   const col = C.cyan;
@@ -314,8 +314,9 @@ function ToolSistema() {
           </div>
         ) : null;
       })()}
-      {/* Modo desarrollador — activa todos los módulos */}
-      {(()=>{
+      {/* Modo desarrollador — activa todos los módulos. Oculto en producción:
+          solo visible si la app fue abierta con ?devmode=1 (ver main.jsx). */}
+      {isDevMode() && (()=>{
         const ALL_MODS=["aquapanel","ecgmodule","condmod","cloromod","tacolasr","oscilo2","comptest","spo2mod","irmodule","termocam","redcable"];
         const [devMode,setDevMode]=useState(()=>ALL_MODS.every(m=>isModActive(m)));
         const [demoMode,setDemoMode]=useState(()=>isDemoMode());
