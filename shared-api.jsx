@@ -35,7 +35,7 @@ async function askClaude(b64, prompt) {
 
 // ── CameraView ────────────────────────────────────────────────────────────────
 function CameraView({ captureLabel="📷 Capturar", onCapture }) {
-  const vRef=useRef(), cRef=useRef(), tkRef=useRef(null);
+  const vRef=useRef(), cRef=useRef(), tkRef=useRef(null), fileRef=useRef(null);
   const [on,setOn]=useState(false), [err,setErr]=useState(null);
   const [torch,setTorch]=useState(false), [torchOk,setTorchOk]=useState(false);
 
@@ -81,6 +81,29 @@ function CameraView({ captureLabel="📷 Capturar", onCapture }) {
     onCapture?.(c.toDataURL("image/jpeg",0.92).split(",")[1], c);
   };
 
+  // Subir una foto ya tomada (galería, cámara externa, foto vieja) en vez de usar
+  // la cámara en vivo — útil cuando la cámara del celular no tiene buena resolución
+  // o cuando ya se sacó la foto con otro equipo (microscopio USB, otra cámara, etc.).
+  const handleFile=(e)=>{
+    const file=e.target.files?.[0];
+    if(!file){ return; }
+    const url=URL.createObjectURL(file);
+    const img=new Image();
+    img.onload=()=>{
+      const MAX=1920;
+      let w=img.naturalWidth, h=img.naturalHeight;
+      if(w>MAX||h>MAX){ const sc=MAX/Math.max(w,h); w=Math.round(w*sc); h=Math.round(h*sc); }
+      const c=cRef.current; if(!c){ URL.revokeObjectURL(url); return; }
+      c.width=w; c.height=h;
+      c.getContext("2d").drawImage(img,0,0,w,h);
+      onCapture?.(c.toDataURL("image/jpeg",0.92).split(",")[1], c);
+      URL.revokeObjectURL(url);
+    };
+    img.onerror=()=>{ setErr("No se pudo leer esa imagen"); URL.revokeObjectURL(url); };
+    img.src=url;
+    e.target.value="";
+  };
+
   useEffect(()=>()=>stop(),[stop]);
 
   const [grid,setGrid]=useState(false);
@@ -122,6 +145,14 @@ function CameraView({ captureLabel="📷 Capturar", onCapture }) {
           <button style={{...S.btn("p",C.violet),flex:1}} onClick={capture}>{captureLabel}</button>
         )}
       </div>
+      {onCapture&&(
+        <>
+          <button style={S.btn("s")} onClick={()=>fileRef.current?.click()}>
+            📁 Subir foto (si la cámara no alcanza)
+          </button>
+          <input ref={fileRef} type="file" accept="image/*" style={{display:"none"}} onChange={handleFile}/>
+        </>
+      )}
     </>
   );
 }
@@ -600,7 +631,5 @@ function Onboarding({ onDone, startStep=null }) {
     </div>
   );
 }
-
-// ── Resistencias ──────────────────────────────────────────────────────────────
 
 export { CameraView, Onboarding, askClaude, getUserKey, runSensorDetection };
