@@ -4,14 +4,35 @@ import { CameraView, askClaude } from "./shared-api.jsx";
 import { CalButton, DemoBanner, ModuleGate, TimeChart, getCal, isDemoMode } from "./shared-mods.jsx";
 import { StopFAB } from "./shared-app.jsx";
 
+const RESISTENCIA_PROMPT =
+  "Sos un técnico electrónico experto leyendo resistencias a partir de una foto tomada con un celular. " +
+  "La foto puede tener reflejos, mala luz o ángulo imperfecto. Puede ser una resistencia tradicional con " +
+  "bandas de colores, o una resistencia SMD con un código numérico impreso (sin bandas).\n\n" +
+  "Si es de bandas de colores: identificá cada banda en orden, empezando desde el extremo donde hay más " +
+  "espacio hasta la primera banda (la banda de tolerancia — generalmente dorada o plateada — queda más " +
+  "separada del resto, al final).\n\n" +
+  "Si es SMD con código numérico (ej: 472, 4R7, 1001, 103): los primeros dígitos son las cifras y el " +
+  "último es el multiplicador en potencias de 10 (472 = 47×10² = 4700Ω = 4.7kΩ); una letra R, K o M " +
+  "indica la posición del punto decimal (4R7 = 4.7Ω, 4K7 = 4.7kΩ); códigos de 4 dígitos (componentes de " +
+  "1% de tolerancia) tienen 3 cifras + 1 multiplicador.\n\n" +
+  "Si no podés distinguir con certeza una banda o un dígito por la foto, decilo en CONFIANZA y listá en " +
+  "VALOR los 2 resultados más probables separados por ' o ' — nunca inventes un valor único con falsa " +
+  "seguridad cuando la lectura es dudosa.\n\n" +
+  "Respondé EXACTAMENTE en este formato, una línea por campo:\n" +
+  "TIPO: [bandas de color / SMD código numérico]\n" +
+  "LEIDO: [lo que ves literalmente — ej: marrón-negro-rojo-dorado, o \"472\"]\n" +
+  "CONFIANZA: [ALTA / MEDIA / BAJA]\n" +
+  "VALOR: [ej: 4.7 kΩ — si CONFIANZA es BAJA, listá 2 opciones separadas por ' o ']\n" +
+  "TOLERANCIA: [±% según la banda/color de tolerancia; si es SMD sin banda visible escribí NO DETERMINABLE]\n" +
+  "Si la foto no muestra ninguna resistencia: SIN COMPONENTE";
+
 function ToolResistencias() {
   const col=C.violet;
   const [loading,setLoading]=useState(false), [result,setResult]=useState(null);
   const analyze=async b64=>{
     setLoading(true); setResult(null);
-    try{ setResult(await askClaude(b64,
-      "Analizá esta resistencia. Respondé exactamente:\nBANDAS: [colores]\nVALOR: [ej: 4.7 kΩ]\nTOLERANCIA: [±%]\nTIPO: [4 o 5 bandas]\nSi no hay resistencia: SIN COMPONENTE"));
-    } catch(e){ setResult(e.message==="NO_KEY"?"🔑 Configurá tu API key de Gemini (botón 🔑 arriba)":e.message==="INVALID_KEY"?"🔑 API key inválida — tocá 🔑 para reconfigurar":"⚠ "+e.message); }
+    try{ setResult(await askClaude(b64, RESISTENCIA_PROMPT)); }
+    catch(e){ setResult(e.message==="NO_KEY"?"🔑 Configurá tu API key de Gemini (botón 🔑 arriba)":e.message==="INVALID_KEY"?"🔑 API key inválida — tocá 🔑 para reconfigurar":"⚠ "+e.message); }
     setLoading(false);
   };
   return (
@@ -22,7 +43,7 @@ function ToolResistencias() {
         <div style={{fontFamily:MONO,fontSize:9,color:col,marginBottom:6,fontWeight:700}}>RESULTADO</div>
         <pre style={{fontFamily:MONO,fontSize:13,color:C.text,whiteSpace:"pre-wrap",margin:0,lineHeight:1.9}}>{result}</pre>
       </div>}
-      <div style={S.note}>Apuntá la cámara con buena luz y presioná Leer bandas.</div>
+      <div style={S.note}>Apuntá la cámara con buena luz y presioná Leer bandas. También podés subir una foto ya tomada.</div>
     </div>
   );
 }
@@ -41,12 +62,19 @@ const INTEGRADO_PROMPT =
   "La foto puede tener baja resolución, reflejos, polvo o el marking parcialmente borrado. Sé honesto sobre la incertidumbre: " +
   "NUNCA inventes un part number específico con falsa certeza si no podés leerlo con confianza — es preferible decir que no estás seguro " +
   "antes que dar un dato incorrecto a un técnico que va a confiar en él.\n\n" +
+  "Para identificar el componente, priorizá primero los ICs más comunes en electrónica de taller/reparación " +
+  "(reguladores de voltaje 78xx/79xx/LM317, amplificadores operacionales LM358/LM324/TL082, temporizadores " +
+  "555/556, lógica CMOS/TTL serie 4000/74xx, drivers de motor/relé ULN2003/L293D, microcontroladores " +
+  "ATmega/PIC/ESP32/STM32, memorias EEPROM 24Cxx, conversores USB-serie CH340/CP2102, optoacopladores " +
+  "4N25/PC817) antes que pensar en componentes raros o poco frecuentes — en un taller real, lo más probable " +
+  "es casi siempre lo más común. Pero si el marking leído no encaja con ninguno de esos, decilo igual.\n\n" +
   "Respondé EXACTAMENTE en este formato, una línea por campo:\n" +
   "MARKING LEIDO: [transcribí EXACTAMENTE los caracteres que ves en el chip, línea por línea separadas por /; usá ? para cualquier carácter que no puedas distinguir con certeza; si no hay texto legible escribí NO LEGIBLE]\n" +
   "CONFIANZA: [ALTA / MEDIA / BAJA — qué tan seguro estás de la lectura del marking]\n" +
   "COMPONENTE: [nombre o part number más probable según el marking; si CONFIANZA es BAJA listá 2-3 candidatos posibles separados por ' o ' en vez de afirmar uno solo]\n" +
   "FUNCION: [qué hace este tipo de componente, en 1-2 líneas]\n" +
   "ENCAPSULADO: [tipo de paquete que VES en la foto — DIP-8, SOIC-16, TO-220, etc. — y cantidad de pines; esto es más confiable que leer el texto]\n" +
+  "ESPECIFICACIONES CLAVE: [si identificás el componente con CONFIANZA ALTA o MEDIA: voltaje de alimentación típico, corriente o potencia máxima u otro dato eléctrico relevante que SEPAS con certeza real para ese part number específico; si no estás seguro del valor exacto, escribí DESCONOCIDO — no inventes números para parecer más completo]\n" +
   "PINES CLAVE: [si identificás el componente con CONFIANZA ALTA o MEDIA: función de los pines más importantes, ej Pin1=VCC, Pin4=GND; si no, escribí DESCONOCIDO]\n" +
   "COMO PROBARLO: [pasos concretos para un técnico con multímetro u osciloscopio]\n" +
   "EQUIVALENTE: [reemplazo común si existe, o NINGUNO]\n" +
