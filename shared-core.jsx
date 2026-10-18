@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React from "react";
 
 
 // ── Service Worker ──────────────────────────────────────────────────────────
@@ -99,6 +99,12 @@ const TOOL = {
   distancia:    { icon:"📏", label:"Distancia",       sub:"IA o medición por toque",              col:C.violet },
   lupa:         { icon:"🔍", label:"Lupa",            sub:"Zoom digital · linterna · congelar imagen", col:C.amber },
   ocr:          { icon:"📄", label:"Escáner de Texto", sub:"Cámara + IA → transcribe texto/series", col:C.green  },
+  jack_thermo:  { icon:"🌡",  label:"Temperatura",    sub:"NTC · experimental — armalo vos",       col:C.orange },
+  jack_thermo2: { icon:"🌡🌡",label:"Dual Temp",       sub:"2 sondas NTC · experimental — armalo vos", col:C.red    },
+  jack_air:     { icon:"💨", label:"Flujo de aire",    sub:"Anemómetro térmico · experimental — armalo vos", col:C.blue   },
+  jack_volt:    { icon:"⚡", label:"Voltaje CC",       sub:"Divisor 27kΩ · experimental — armalo vos", col:C.amber  },
+  jack_light:   { icon:"☀️", label:"Luminosidad",      sub:"LDR · experimental — armalo vos",       col:C.violet },
+  jack_raw:     { icon:"〜", label:"Señal cruda",      sub:"Voltaje de audio del jack · experimental — armalo vos", col:C.green  },
   tacometro:    { icon:"⚙️", label:"Tacómetro",       sub:"Módulo externo próximamente",          col:C.green  },
   red:          { icon:"📶", label:"Red / Internet",  sub:"Velocidad · Ping · Tipo de conexión",  col:C.blue   },
   ping:         { icon:"📡", label:"Ping",             sub:"Latencia continua · gráfico · loss",    col:C.cyan   },
@@ -113,6 +119,7 @@ const TOOL = {
 const BLOCKS = [
   { id:"celular",  icon:"📱", label:"CELULAR",     col:C.cyan,   tools:["decibeles","nivel","brujula","oscilo","vibro","espectro","generador","ecggen","sistema","dispositivo","convertidor","transportador","cronometro","metales","qr","ir","nfc"] },
   { id:"camara",   icon:"📷", label:"CÁMARA + IA", col:C.violet, tools:["resistencias","integrados","distancia","endoscopio","lupa","ocr","ppg","cloro"] },
+  { id:"jack",     icon:"🔌", label:"JACK 3.5mm",  col:C.orange, tools:["jack_thermo","jack_thermo2","jack_air","jack_volt","jack_light","jack_raw"] },
   { id:"celularplus", icon:"📶", label:"CONECTIVIDAD", col:C.blue, tools:["red","ping","lan","http","ble","ipinfo","usbprobe"] },
 ];
 
