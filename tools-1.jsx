@@ -625,6 +625,13 @@ function ToolJackSensor({ modId }) {
   return (
     <div style={S.wrap}>
       <div style={S.st(col)}>▸ {m.icon} {m.label}</div>
+      <div style={{...glass(C.amber,0.08),borderRadius:10,padding:"10px 14px",
+        border:`1px solid rgba(${rgb(C.amber)},0.3)`}}>
+        <div style={{fontFamily:MONO,fontSize:10,color:C.amber,fontWeight:700,lineHeight:1.7}}>
+          🧪 EXPERIMENTAL — este sensor solo funciona si armaste vos el circuito (ver manual abajo).
+          No viene calibrado de fábrica ni se vende armado.
+        </div>
+      </div>
       <JackManualPanel/>
 
       {/* Display principal */}
