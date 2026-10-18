@@ -3,7 +3,7 @@ import ReactDOM from "react-dom/client";
 import { BLOCKS, C, MONO, S, SVG_PATHS, TOOL, ToolIcon, VERSION, rgb } from "./shared-core.jsx";
 import { Onboarding } from "./shared-api.jsx";
 import { ErrorBoundary, ModulePlaceholder, TOOL_NEEDS } from "./shared-app.jsx";
-import { ToolDistancia, ToolIntegrado, ToolResistencias } from "./tools-1.jsx";
+import { ToolDistancia, ToolIntegrado, ToolJackSensor, ToolResistencias } from "./tools-1.jsx";
 import { ToolDecibeles, ToolNivel } from "./tools-2.jsx";
 import { ToolBrujula, ToolOscilo } from "./tools-3.jsx";
 import { ToolUSBProbe } from "./tools-5.jsx";
@@ -15,6 +15,8 @@ import { ToolIR, ToolNFC } from "./tools-10.jsx";
 import { ToolLupa, ToolOCR } from "./tools-11.jsx";
 import { ToolConvertidor } from "./tools-12.jsx";
 import { ToolCronometro, ToolDetectorMetales, ToolTransportador } from "./tools-13.jsx";
+
+const EXPERIMENTAL = new Set(["jack_thermo","jack_thermo2","jack_air","jack_volt","jack_light","jack_raw"]);
 
 function Home({onSel, caps}) {
   const [sector,setSector]=React.useState(null);
@@ -54,6 +56,7 @@ function Home({onSel, caps}) {
                   color:cantRun?C.dim:C.text,marginBottom:3}}>{t.label}</div>
                 <div style={{fontSize:11,color:C.dim,lineHeight:1.5}}>{t.sub}</div>
                 {disabled&&<div style={{marginTop:6}}><span style={S.pill(C.green)}>módulo</span></div>}
+                {!disabled&&EXPERIMENTAL.has(tid)&&<div style={{marginTop:6}}><span style={S.pill(C.amber)}>🧪 experimental</span></div>}
                 {cantRun&&<div style={{marginTop:6}}>
                   <span style={S.pill(C.red)}>sin {missing.join(" + ")}</span>
                 </div>}
@@ -140,6 +143,12 @@ function getView(tool) {
     case "ir":            return <ToolIR key={tool}/>;
     case "endoscopio":    return <ToolEndoscopio key={tool}/>;
     case "usbprobe":      return <ToolUSBProbe key={tool}/>;
+    case "jack_thermo":   return <ToolJackSensor key={tool} modId="jack_thermo"/>;
+    case "jack_thermo2":  return <ToolJackSensor key={tool} modId="jack_thermo2"/>;
+    case "jack_air":      return <ToolJackSensor key={tool} modId="jack_air"/>;
+    case "jack_volt":     return <ToolJackSensor key={tool} modId="jack_volt"/>;
+    case "jack_light":    return <ToolJackSensor key={tool} modId="jack_light"/>;
+    case "jack_raw":      return <ToolJackSensor key={tool} modId="jack_raw"/>;
     case "tacometro":
       return <ModulePlaceholder key={tool} icon="⚙️" title="Tacómetro Estroboscópico"
         why={"El efecto estroboscópico puede desencadenar convulsiones.\nRequiere módulo externo con LED controlado."}
