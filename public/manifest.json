@@ -1,13 +1,18 @@
 {
+  "id": "/",
   "name": "SEM Tools",
   "short_name": "SEM Tools",
-  "description": "Herramientas de taller biomédico — Soluciones Electromédicas SJ",
+  "description": "Caja de herramientas de taller para técnicos: identificá componentes con cámara + IA, medí con los sensores del celular, convertí unidades y diagnosticá red — todo desde el celular.",
+  "lang": "es",
+  "dir": "ltr",
   "theme_color": "#0D1829",
   "background_color": "#0D1829",
   "display": "standalone",
+  "display_override": ["standalone", "minimal-ui", "browser"],
   "orientation": "portrait",
   "start_url": "/",
   "scope": "/",
+  "categories": ["utilities", "productivity"],
   "icons": [
     {
       "src": "/icon-192.png",
