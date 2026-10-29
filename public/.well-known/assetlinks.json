@@ -1,0 +1,8 @@
+[{
+  "relation": ["delegate_permission/common.handle_all_urls"],
+  "target": {
+    "namespace": "android_app",
+    "package_name": "com.solucioneselectromedicas.semtools",
+    "sha256_cert_fingerprints": ["CE:8B:5C:89:D2:C3:22:2A:20:A8:95:8C:8E:E0:CC:35:43:C4:32:B3:AD:95:A8:DE:58:F5:1E:89:FF:7F:B8:82"]
+  }
+}]
