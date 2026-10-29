@@ -35,16 +35,36 @@ async function callAnthropic(messages, key) {
 }
 
 // ── Llamada a Gemini ──────────────────────────────────────────────────────────
-// Probamos primero el modelo "pro" (mejor para leer texto chico, como el marking
-// de un integrado) y vamos cayendo a modelos más livianos si no está disponible
-// en la key del usuario o si devuelve una respuesta vacía.
-const GEMINI_MODELS = [
+// Lista fija de repuesto, por si falla la consulta en vivo a Google (ej. sin red).
+// No es la fuente principal — Google va dando de baja nombres de modelo con el
+// tiempo, así que primero le preguntamos a la propia API qué tiene disponible.
+const GEMINI_MODELS_FALLBACK = [
   ['v1beta','gemini-2.5-pro'],
   ['v1beta','gemini-2.5-flash'],
   ['v1beta','gemini-2.0-flash'],
   ['v1beta','gemini-2.0-flash-lite'],
   ['v1beta','gemini-1.5-flash-latest'],
 ];
+
+// Pregunta a Gemini qué modelos están disponibles AHORA para esta key y
+// soportan generateContent — así nunca dependemos de un nombre fijo que
+// Google puede descontinuar en cualquier momento.
+async function listGeminiModels(key) {
+  try {
+    const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${key}&pageSize=50`);
+    const d = await r.json();
+    if (!r.ok || !Array.isArray(d.models)) return [];
+    const names = d.models
+      .filter(m => Array.isArray(m.supportedGenerationMethods) && m.supportedGenerationMethods.includes('generateContent'))
+      .map(m => (m.name || '').replace(/^models\//, ''))
+      .filter(n => /gemini/i.test(n));
+    // Preferir "pro" > "flash" > resto; penalizar "lite"/"exp"/"preview" (menos capaces o inestables)
+    const score = n => (/pro/i.test(n) ? 2 : /flash/i.test(n) ? 1 : 0)
+      - (/lite/i.test(n) ? 0.4 : 0) - (/exp|preview|thinking/i.test(n) ? 0.3 : 0);
+    names.sort((a, b) => score(b) - score(a));
+    return names.map(n => ['v1beta', n]);
+  } catch(_e) { return []; }
+}
 
 async function callGemini(messages, key) {
   // Convertir formato Anthropic → Gemini parts
@@ -56,8 +76,14 @@ async function callGemini(messages, key) {
     }
   }
 
+  const discovered = await listGeminiModels(key);
+  const seen = new Set();
+  const candidates = [...discovered, ...GEMINI_MODELS_FALLBACK]
+    .filter(([, m]) => { if (seen.has(m)) return false; seen.add(m); return true; })
+    .slice(0, 6);
+
   let lastErr = 'No hay modelos Gemini disponibles para esta key';
-  for (const [ver, model] of GEMINI_MODELS) {
+  for (const [ver, model] of candidates) {
     const url = `https://generativelanguage.googleapis.com/${ver}/models/${model}:generateContent?key=${key}`;
     const r = await fetch(url, {
       method: 'POST',
