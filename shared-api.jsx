@@ -333,6 +333,15 @@ function Onboarding({ onDone, startStep=null }) {
               </div>
             </div>
 
+            <div style={{...glass(C.amber,0.07),borderRadius:12,padding:"10px 14px",
+              border:`1px solid rgba(${rgb(C.amber)},0.25)`}}>
+              <div style={{fontFamily:MONO,fontSize:10,color:C.amber,lineHeight:1.7}}>
+                ⚠ El plan gratuito de Google tiene un límite de usos por día. Si se agota, esperá
+                unas horas o probá con otra cuenta de Google. Para uso más intensivo, Claude
+                (de pago) no tiene ese límite diario.
+              </div>
+            </div>
+
             {/* Tabs Gemini / Claude */}
             <div style={{display:"flex",gap:6}}>
               {[
