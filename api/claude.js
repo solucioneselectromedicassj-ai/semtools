@@ -4,27 +4,34 @@ export const config = { runtime: 'edge' };
 const CORS = { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' };
 
 // ── Llamada a Anthropic Claude ────────────────────────────────────────────────
+// Lista de modelos de repuesto: si el primero quedó descontinuado o no está
+// disponible para la key del usuario, probamos el siguiente en vez de fallar.
+const ANTHROPIC_MODELS = ['claude-sonnet-5-5', 'claude-opus-5-5', 'claude-haiku-5-5'];
+
 async function callAnthropic(messages, key) {
-  const r = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': key,
-      'anthropic-version': '2023-06-01',
-    },
-    body: JSON.stringify({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 1000,
-      messages,
-    }),
-  });
-  let d; try { d = await r.json(); } catch(_e) { d = { error:{ message:'Non-JSON response' } }; }
-  if (!r.ok) {
-    if (r.status === 401) return { ok:false, error:'INVALID_KEY' };
-    return { ok:false, error: d?.error?.message || 'Error Anthropic' };
+  let lastErr = 'No se pudo conectar con Claude';
+  for (const model of ANTHROPIC_MODELS) {
+    const r = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': key,
+        'anthropic-version': '2023-06-01',
+      },
+      body: JSON.stringify({ model, max_tokens: 1000, messages }),
+    });
+    let d; try { d = await r.json(); } catch(_e) { d = { error:{ message:'Non-JSON response' } }; }
+    if (!r.ok) {
+      if (r.status === 401) return { ok:false, error:'INVALID_KEY' };
+      lastErr = d?.error?.message || 'Error Anthropic';
+      // Modelo inexistente/descontinuado para esta key → probar el siguiente
+      if (r.status === 404 || /model/i.test(lastErr)) continue;
+      return { ok:false, error:lastErr };
+    }
+    const text = d?.content?.[0]?.text || 'Sin respuesta';
+    return { ok:true, text };
   }
-  const text = d?.content?.[0]?.text || 'Sin respuesta';
-  return { ok:true, text };
+  return { ok:false, error:lastErr };
 }
 
 // ── Llamada a Gemini ──────────────────────────────────────────────────────────
