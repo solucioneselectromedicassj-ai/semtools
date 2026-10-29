@@ -160,6 +160,7 @@ function ToolOCR() {
       <div style={S.note}>
         Transcribe texto literal (series, modelos, códigos de equipo) — no interpreta ni identifica el componente.
         Para identificar un integrado por su marking usá "Integrados IC".
+        Si usás la key gratis de Gemini: Google tiene un límite diario de usos — si deja de responder, esperá unas horas o probá con otra cuenta de Google.
       </div>
     </div>
   );
