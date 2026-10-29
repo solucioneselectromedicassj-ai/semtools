@@ -39,9 +39,9 @@ async function callAnthropic(messages, key) {
 // No es la fuente principal — Google va dando de baja nombres de modelo con el
 // tiempo, así que primero le preguntamos a la propia API qué tiene disponible.
 const GEMINI_MODELS_FALLBACK = [
-  ['v1beta','gemini-2.5-pro'],
   ['v1beta','gemini-2.5-flash'],
   ['v1beta','gemini-2.0-flash'],
+  ['v1beta','gemini-2.5-pro'],
   ['v1beta','gemini-2.0-flash-lite'],
   ['v1beta','gemini-1.5-flash-latest'],
 ];
@@ -58,9 +58,11 @@ async function listGeminiModels(key) {
       .filter(m => Array.isArray(m.supportedGenerationMethods) && m.supportedGenerationMethods.includes('generateContent'))
       .map(m => (m.name || '').replace(/^models\//, ''))
       .filter(n => /gemini/i.test(n));
-    // Preferir "pro" > "flash" > resto; penalizar "lite"/"exp"/"preview" (menos capaces o inestables)
-    const score = n => (/pro/i.test(n) ? 2 : /flash/i.test(n) ? 1 : 0)
-      - (/lite/i.test(n) ? 0.4 : 0) - (/exp|preview|thinking/i.test(n) ? 0.3 : 0);
+    // Preferir "flash" primero: en el plan gratis suele tener cuota real, mientras que
+    // los modelos "pro" muchas veces tienen cuota 0 en el free tier y fallan siempre.
+    // Penalizar "lite"/"exp"/"preview" (menos capaces o inestables).
+    const score = n => (/flash/i.test(n) ? 2 : /pro/i.test(n) ? 1 : 0)
+      - (/lite/i.test(n) ? 0.3 : 0) - (/exp|preview|thinking/i.test(n) ? 0.3 : 0);
     names.sort((a, b) => score(b) - score(a));
     return names.map(n => ['v1beta', n]);
   } catch(_e) { return []; }
@@ -103,6 +105,11 @@ async function callGemini(messages, key) {
     if (!text) { lastErr = 'Respuesta vacía del modelo ' + model; continue; }
     if (text.includes('no longer available') || text.includes('please update your code')) { lastErr = text; continue; }
     return { ok:true, text };
+  }
+  // Mensaje legible si lo que quedó fue específicamente un error de cuota agotada,
+  // en vez de mostrarle al usuario el bloque crudo de texto en inglés de Google.
+  if (/exceeded your current quota|RESOURCE_EXHAUSTED|quota/i.test(lastErr)) {
+    lastErr = 'Se agotó la cuota gratuita de IA por ahora (el modelo con más capacidad no está incluido en el plan gratis). Esperá un rato y probá de nuevo, o usá otra API key.';
   }
   return { ok:false, error:lastErr };
 }
