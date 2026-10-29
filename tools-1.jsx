@@ -43,7 +43,10 @@ function ToolResistencias() {
         <div style={{fontFamily:MONO,fontSize:9,color:col,marginBottom:6,fontWeight:700}}>RESULTADO</div>
         <pre style={{fontFamily:MONO,fontSize:13,color:C.text,whiteSpace:"pre-wrap",margin:0,lineHeight:1.9}}>{result}</pre>
       </div>}
-      <div style={S.note}>Apuntá la cámara con buena luz y presioná Leer bandas. También podés subir una foto ya tomada.</div>
+      <div style={S.note}>
+        Apuntá la cámara con buena luz y presioná Leer bandas. También podés subir una foto ya tomada.
+        Si usás la key gratis de Gemini: Google tiene un límite diario de usos — si deja de responder, esperá unas horas o probá con otra cuenta de Google.
+      </div>
     </div>
   );
 }
@@ -142,6 +145,7 @@ function ToolIntegrado() {
       <div style={S.note}>
         Enfocá bien de cerca el marking, con buena luz y sin reflejos — eso es lo que más mejora el resultado.
         Si la IA no está segura te lo va a decir en CONFIANZA; usá los enlaces de arriba para confirmar con el datasheet real antes de dar el componente por bueno.
+        Si usás la key gratis de Gemini: Google tiene un límite diario de usos — si deja de responder, esperá unas horas o probá con otra cuenta de Google.
       </div>
     </div>
   );
