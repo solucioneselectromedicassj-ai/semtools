@@ -14,8 +14,32 @@ function ToolBrujula() {
     return ["N","NE","E","SE","S","SO","O","NO"][Math.round(d/45)%8];
   };
 
+  // Suaviza el rumbo (evita el "titileo" por ruido normal del magnetómetro) y
+  // lo throttlea a ~12 lecturas/seg — sin esto, escribir el state a 20-60Hz
+  // con valores crudos hace que la aguja tiemble en vez de moverse suave.
+  const pushHeading = raw => {
+    const now = performance.now();
+    if (refs.current.lastT && now - refs.current.lastT < 80) return;
+    refs.current.lastT = now;
+    const prev = refs.current.smoothed;
+    let next;
+    if (prev == null) next = raw;
+    else {
+      const diff = ((raw - prev + 540) % 360) - 180; // distancia angular más corta (maneja 359→0)
+      next = (prev + diff * 0.35 + 360) % 360;
+    }
+    refs.current.smoothed = next;
+    setHdg(next);
+  };
+
   const startListener=()=>{
-    let gotData=false;
+    // Lock sincrónico (ref, no state) de qué método quedó activo — el state
+    // `method` se actualiza un render después del evento, así que usarlo para
+    // decidir si otro método puede escribir dejaba una ventana donde dos
+    // fuentes de heading competían y hacían temblar la aguja.
+    refs.current.locked = null;
+    refs.current.smoothed = null;
+    refs.current.lastT = 0;
 
     // Método 1: AbsoluteOrientationSensor (Generic Sensor API — más preciso)
     if('AbsoluteOrientationSensor' in window){
@@ -25,29 +49,38 @@ function ToolBrujula() {
           const q=sensor.quaternion; // [x,y,z,w]
           // Convertir quaternion a heading (yaw)
           const heading=Math.atan2(2*(q[0]*q[3]+q[1]*q[2]),1-2*(q[2]*q[2]+q[3]*q[3]))*180/Math.PI;
-          setHdg(((heading%360)+360)%360);
-          gotData=true; setMethod("abs-sensor");
+          pushHeading(((heading%360)+360)%360);
+          setMethod("abs-sensor");
         });
-        sensor.addEventListener('error',e2=>console.warn("AbsOriSensor:",e2.error.name));
+        sensor.addEventListener('error',e2=>{
+          console.warn("AbsOriSensor:",e2.error.name);
+          // Liberar el lock para que deviceorientationabsolute/iOS tomen la posta
+          if(refs.current.locked==="abs-sensor") refs.current.locked=null;
+        });
         sensor.start();
         refs.current.sensor=sensor;
+        // Reservar el método preferido ANTES de la primera lectura, para que
+        // deviceorientationabsolute no alcance a escribir mientras tanto.
+        refs.current.locked="abs-sensor";
       } catch(_e){ /* fallback */ }
     }
 
     // Método 2: deviceorientationabsolute (Android Chrome)
     const hAbs=e=>{
-      if(gotData&&method==="abs-sensor") return;
+      if(refs.current.locked && refs.current.locked!=="abs-event") return;
       if(e.alpha==null) return;
-      gotData=true; setMethod("abs-event");
-      setHdg((360-e.alpha+360)%360);
+      refs.current.locked="abs-event";
+      setMethod("abs-event");
+      pushHeading((360-e.alpha+360)%360);
     };
 
     // Método 3: iOS webkitCompassHeading
     const hRel=e=>{
-      if(gotData) return;
+      if(refs.current.locked) return;
       if(e.webkitCompassHeading!=null){
-        gotData=true; setMethod("ios");
-        setHdg(e.webkitCompassHeading);
+        refs.current.locked="ios";
+        setMethod("ios");
+        pushHeading(e.webkitCompassHeading);
       }
     };
 
