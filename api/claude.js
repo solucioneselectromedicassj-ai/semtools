@@ -1,9 +1,9 @@
-// api/claude.js — Proxy dual: Gemini (gratis) o Claude (Anthropic)
+// api/claude.js — Proxy triple: Gemini (gratis), Groq/Llama Vision (gratis) o Claude (Anthropic, de pago)
 // Detecta por el prefijo de la key del usuario
 export const config = { runtime: 'edge', maxDuration: 60 };
 const CORS = { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' };
 
-// fetch con límite de tiempo propio — sin esto, si Google/Anthropic tarda en
+// fetch con límite de tiempo propio — sin esto, si el proveedor tarda en
 // responder, la función de Vercel se queda colgada hasta que la plataforma la
 // corta de golpe, y el cliente recibe una respuesta rota (no JSON) en vez de
 // un error prolijo.
@@ -44,6 +44,59 @@ async function callAnthropic(messages, key) {
     }
     const text = d?.content?.[0]?.text || 'Sin respuesta';
     return { ok:true, text };
+  }
+  return { ok:false, error:lastErr };
+}
+
+// ── Llamada a Groq (Llama Vision) ─────────────────────────────────────────────
+// API compatible con el formato de OpenAI. Gratis, sin tarjeta — útil como
+// segundo proveedor gratuito independiente de Google, para aislar si un
+// problema es "cuota de Gemini" o algo más general del lado de la app.
+// Los nombres de modelo son los que Groq tenía publicados al armar esto;
+// si Groq los descontinúa, probamos el siguiente de la lista igual que con Gemini.
+const GROQ_MODELS = [
+  'meta-llama/llama-4-scout-17b-16e-instruct',
+  'meta-llama/llama-4-maverick-17b-128e-instruct',
+  'llama-3.2-90b-vision-preview',
+  'llama-3.2-11b-vision-preview',
+];
+
+// Convierte nuestro formato interno (tipo Anthropic: content en bloques
+// {type:'image'|'text'}) al formato de OpenAI/Groq (image_url con data URI).
+function toOpenAIMessages(messages) {
+  return messages.map(msg => ({
+    role: msg.role,
+    content: (Array.isArray(msg.content) ? msg.content : [{ type:'text', text: msg.content }]).map(block => {
+      if (block.type === 'image') return { type:'image_url', image_url:{ url:`data:${block.source.media_type};base64,${block.source.data}` } };
+      return { type:'text', text: block.text };
+    }),
+  }));
+}
+
+async function callGroq(messages, key) {
+  const oaMessages = toOpenAIMessages(messages);
+  let lastErr = 'No se pudo conectar con Groq';
+  for (const model of GROQ_MODELS) {
+    let r;
+    try {
+      r = await fetchT('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${key}` },
+        body: JSON.stringify({ model, messages: oaMessages, max_tokens: 1200, temperature: 0.2 }),
+      }, 18000);
+    } catch(_e) { lastErr = 'El modelo ' + model + ' tardó demasiado en responder'; continue; }
+    let d; try { d = await r.json(); } catch(_e) { continue; }
+    if (!r.ok) {
+      if (r.status === 401) return { ok:false, error:'INVALID_KEY' };
+      lastErr = d?.error?.message || 'Error Groq';
+      continue; // modelo no disponible/descontinuado para esta key → probar el siguiente
+    }
+    const text = d?.choices?.[0]?.message?.content || '';
+    if (!text) { lastErr = 'Respuesta vacía del modelo ' + model; continue; }
+    return { ok:true, text };
+  }
+  if (/rate limit|quota|RESOURCE_EXHAUSTED/i.test(lastErr)) {
+    lastErr = 'Se agotó la cuota gratuita de Groq por ahora. Esperá un rato y probá de nuevo.';
   }
   return { ok:false, error:lastErr };
 }
@@ -151,12 +204,13 @@ export default async function handler(req) {
   catch(_e) { return new Response(JSON.stringify({ error:{ message:'Pedido inválido — intentá de nuevo' } }), { status:400, headers:CORS }); }
   const messages = body.messages || [];
 
-  // Detectar proveedor por prefijo de key
+  // Detectar proveedor por prefijo de key: sk-ant-/sk- → Claude, gsk_ → Groq, resto → Gemini
   const isAnthropic = key.startsWith('sk-ant-') || key.startsWith('sk-');
+  const isGroq = key.startsWith('gsk_');
   let result;
   try {
-    result = isAnthropic
-      ? await callAnthropic(messages, key)
+    result = isAnthropic ? await callAnthropic(messages, key)
+      : isGroq ? await callGroq(messages, key)
       : await callGemini(messages, key);
   } catch(_e) {
     return new Response(JSON.stringify({ error:{ message:'Error inesperado del servidor — intentá de nuevo' } }), { status:500, headers:CORS });
