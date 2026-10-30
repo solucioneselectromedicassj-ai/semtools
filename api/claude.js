@@ -1,7 +1,18 @@
 // api/claude.js — Proxy dual: Gemini (gratis) o Claude (Anthropic)
 // Detecta por el prefijo de la key del usuario
-export const config = { runtime: 'edge' };
+export const config = { runtime: 'edge', maxDuration: 60 };
 const CORS = { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' };
+
+// fetch con límite de tiempo propio — sin esto, si Google/Anthropic tarda en
+// responder, la función de Vercel se queda colgada hasta que la plataforma la
+// corta de golpe, y el cliente recibe una respuesta rota (no JSON) en vez de
+// un error prolijo.
+async function fetchT(url, opts, ms) {
+  const ctrl = new AbortController();
+  const t = setTimeout(() => ctrl.abort(), ms);
+  try { return await fetch(url, { ...opts, signal: ctrl.signal }); }
+  finally { clearTimeout(t); }
+}
 
 // ── Llamada a Anthropic Claude ────────────────────────────────────────────────
 // Lista de modelos de repuesto: si el primero quedó descontinuado o no está
@@ -11,15 +22,18 @@ const ANTHROPIC_MODELS = ['claude-sonnet-5-5', 'claude-opus-5-5', 'claude-haiku-
 async function callAnthropic(messages, key) {
   let lastErr = 'No se pudo conectar con Claude';
   for (const model of ANTHROPIC_MODELS) {
-    const r = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': key,
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify({ model, max_tokens: 1000, messages }),
-    });
+    let r;
+    try {
+      r = await fetchT('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': key,
+          'anthropic-version': '2023-06-01',
+        },
+        body: JSON.stringify({ model, max_tokens: 1000, messages }),
+      }, 20000);
+    } catch(_e) { lastErr = 'Claude tardó demasiado en responder — probá de nuevo'; continue; }
     let d; try { d = await r.json(); } catch(_e) { d = { error:{ message:'Non-JSON response' } }; }
     if (!r.ok) {
       if (r.status === 401) return { ok:false, error:'INVALID_KEY' };
@@ -42,16 +56,15 @@ const GEMINI_MODELS_FALLBACK = [
   ['v1beta','gemini-2.5-flash'],
   ['v1beta','gemini-2.0-flash'],
   ['v1beta','gemini-2.5-pro'],
-  ['v1beta','gemini-2.0-flash-lite'],
-  ['v1beta','gemini-1.5-flash-latest'],
 ];
 
 // Pregunta a Gemini qué modelos están disponibles AHORA para esta key y
 // soportan generateContent — así nunca dependemos de un nombre fijo que
-// Google puede descontinuar en cualquier momento.
+// Google puede descontinuar en cualquier momento. Timeout corto: si Google
+// tarda en contestar esto, mejor seguir directo con la lista fija de repuesto.
 async function listGeminiModels(key) {
   try {
-    const r = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${key}&pageSize=50`);
+    const r = await fetchT(`https://generativelanguage.googleapis.com/v1beta/models?key=${key}&pageSize=50`, {}, 6000);
     const d = await r.json();
     if (!r.ok || !Array.isArray(d.models)) return [];
     const names = d.models
@@ -80,18 +93,25 @@ async function callGemini(messages, key) {
 
   const discovered = await listGeminiModels(key);
   const seen = new Set();
+  // Como mucho 3 modelos en fila: cada intento ya tiene su propio timeout, pero
+  // si probamos demasiados en serie la función entera puede exceder el límite
+  // de tiempo de Vercel y la plataforma la corta con una respuesta rota.
   const candidates = [...discovered, ...GEMINI_MODELS_FALLBACK]
     .filter(([, m]) => { if (seen.has(m)) return false; seen.add(m); return true; })
-    .slice(0, 6);
+    .slice(0, 3);
 
   let lastErr = 'No hay modelos Gemini disponibles para esta key';
+  let timedOut = false;
   for (const [ver, model] of candidates) {
     const url = `https://generativelanguage.googleapis.com/${ver}/models/${model}:generateContent?key=${key}`;
-    const r = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ contents:[{ role:'user', parts }], generationConfig:{ maxOutputTokens:1200, temperature:0.2 } }),
-    });
+    let r;
+    try {
+      r = await fetchT(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contents:[{ role:'user', parts }], generationConfig:{ maxOutputTokens:1200, temperature:0.2 } }),
+      }, 18000);
+    } catch(_e) { timedOut = true; lastErr = 'El modelo ' + model + ' tardó demasiado en responder'; continue; }
     let d; try { d = await r.json(); } catch(_e) { continue; }
     if (!r.ok) {
       const msg = d?.error?.message || '';
@@ -106,10 +126,12 @@ async function callGemini(messages, key) {
     if (text.includes('no longer available') || text.includes('please update your code')) { lastErr = text; continue; }
     return { ok:true, text };
   }
-  // Mensaje legible si lo que quedó fue específicamente un error de cuota agotada,
-  // en vez de mostrarle al usuario el bloque crudo de texto en inglés de Google.
+  // Mensaje legible según la causa, en vez de mostrarle al usuario el bloque
+  // crudo de texto en inglés de Google.
   if (/exceeded your current quota|RESOURCE_EXHAUSTED|quota/i.test(lastErr)) {
     lastErr = 'Se agotó la cuota gratuita de IA por ahora (el modelo con más capacidad no está incluido en el plan gratis). Esperá un rato y probá de nuevo, o usá otra API key.';
+  } else if (timedOut) {
+    lastErr = 'La IA tardó demasiado en responder — puede ser la conexión. Probá de nuevo, con mejor señal si es posible.';
   }
   return { ok:false, error:lastErr };
 }
@@ -124,14 +146,21 @@ export default async function handler(req) {
   const key = req.headers.get('x-user-key') || process.env.ANTHROPIC_API_KEY || '';
   if (!key) return new Response(JSON.stringify({ error:{ message:'NO_KEY' } }), { status:401, headers:CORS });
 
-  const body = await req.json();
+  let body;
+  try { body = await req.json(); }
+  catch(_e) { return new Response(JSON.stringify({ error:{ message:'Pedido inválido — intentá de nuevo' } }), { status:400, headers:CORS }); }
   const messages = body.messages || [];
 
   // Detectar proveedor por prefijo de key
   const isAnthropic = key.startsWith('sk-ant-') || key.startsWith('sk-');
-  const result = isAnthropic
-    ? await callAnthropic(messages, key)
-    : await callGemini(messages, key);
+  let result;
+  try {
+    result = isAnthropic
+      ? await callAnthropic(messages, key)
+      : await callGemini(messages, key);
+  } catch(_e) {
+    return new Response(JSON.stringify({ error:{ message:'Error inesperado del servidor — intentá de nuevo' } }), { status:500, headers:CORS });
+  }
 
   if (!result.ok) {
     if (result.error === 'INVALID_KEY') return new Response(JSON.stringify({ error:{ message:'INVALID_KEY' } }), { status:401, headers:CORS });
