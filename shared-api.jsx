@@ -222,6 +222,11 @@ function Onboarding({ onDone, startStep=null }) {
   const [caps,    setCaps]    = useState(null);
   const [scanning,setScanning]= useState(false);
 
+  // Proveedor activo según el prefijo de la key — define qué pestaña/guía mostrar.
+  const activeProvider = key.startsWith("gsk_") ? "groq"
+    : (key.startsWith("sk-ant-") || key.startsWith("sk-")) ? "claude"
+    : "gemini";
+
   // ── PASO 1: API Key ────────────────────────────────────────────────────────
   const testAndSave = async () => {
     const k = key.trim();
@@ -233,6 +238,17 @@ function Onboarding({ onDone, startStep=null }) {
           headers:{ "x-api-key":k, "anthropic-version":"2023-06-01" }
         });
         if (r.status === 401) throw new Error("Key de Claude inválida");
+        localStorage.setItem("sem_gemini_key", k);
+        setStep(2); setTesting(false); return;
+      } catch(e2) { setErr(e2.message); setTesting(false); return; }
+    }
+    // Groq key: gsk_... → validar directamente contra Groq
+    if (k.startsWith("gsk_")) {
+      try {
+        const r = await fetch("https://api.groq.com/openai/v1/models", {
+          headers:{ "Authorization":`Bearer ${k}` }
+        });
+        if (r.status === 401) throw new Error("Key de Groq inválida");
         localStorage.setItem("sem_gemini_key", k);
         setStep(2); setTesting(false); return;
       } catch(e2) { setErr(e2.message); setTesting(false); return; }
@@ -336,24 +352,24 @@ function Onboarding({ onDone, startStep=null }) {
             <div style={{...glass(C.amber,0.07),borderRadius:12,padding:"10px 14px",
               border:`1px solid rgba(${rgb(C.amber)},0.25)`}}>
               <div style={{fontFamily:MONO,fontSize:10,color:C.amber,lineHeight:1.7}}>
-                ⚠ El plan gratuito de Google tiene un límite de usos por día. Si se agota, esperá
-                unas horas o probá con otra cuenta de Google. Para uso más intensivo, Claude
-                (de pago) no tiene ese límite diario.
+                ⚠ Los planes gratuitos (Google, Groq) tienen un límite de usos por día. Si se agota,
+                esperá unas horas, probá con otra cuenta, o probá el otro proveedor gratuito.
+                Para uso más intensivo, Claude (de pago) no tiene ese límite diario.
               </div>
             </div>
 
-            {/* Tabs Gemini / Claude */}
+            {/* Tabs Gemini / Groq / Claude */}
             <div style={{display:"flex",gap:6}}>
               {[
-                {id:"gemini",label:"Google Gemini",badge:"GRATIS",col:C.blue},
-                {id:"claude",label:"Claude (Anthropic)",badge:"DE PAGO",col:C.violet},
+                {id:"gemini",label:"Google Gemini",badge:"GRATIS",col:C.blue,sentinel:""},
+                {id:"groq",label:"Groq (Llama Vision)",badge:"GRATIS",col:C.green,sentinel:"gsk_"},
+                {id:"claude",label:"Claude (Anthropic)",badge:"DE PAGO",col:C.violet,sentinel:"sk-"},
               ].map(op=>(
                 <button key={op.id} style={{
-                  flex:1,border:`2px solid ${key.startsWith("sk-")?op.id==="claude"?op.col:"rgba(255,255,255,0.1)":op.id==="gemini"?op.col:"rgba(255,255,255,0.1)"}`,
+                  flex:1,border:`2px solid ${activeProvider===op.id?op.col:"rgba(255,255,255,0.1)"}`,
                   borderRadius:10,padding:"10px 6px",cursor:"pointer",textAlign:"center",
-                  background:((key.startsWith("sk-")&&op.id==="claude")||(!key.startsWith("sk-")&&op.id==="gemini"))
-                    ?`rgba(${rgb(op.col)},0.12)`:"rgba(255,255,255,0.03)",
-                }} onClick={()=>setKey(op.id==="gemini"?"":"sk-")}>
+                  background:activeProvider===op.id?`rgba(${rgb(op.col)},0.12)`:"rgba(255,255,255,0.03)",
+                }} onClick={()=>setKey(op.sentinel)}>
                   <div style={{fontFamily:MONO,fontSize:10,fontWeight:700,color:op.col}}>{op.label}</div>
                   <div style={{...S.pill(op.col),marginTop:4,display:"inline-block",fontSize:8}}>{op.badge}</div>
                 </button>
@@ -361,7 +377,7 @@ function Onboarding({ onDone, startStep=null }) {
             </div>
 
             {/* Guía Gemini */}
-            {!key.startsWith("sk-") && (
+            {activeProvider==="gemini" && (
               <div style={{display:"flex",flexDirection:"column",gap:12}}>
                 <div style={{fontFamily:MONO,fontSize:9,color:C.blue,fontWeight:700,letterSpacing:2}}>
                   PASO A PASO — GOOGLE GEMINI (GRATIS)
@@ -395,8 +411,41 @@ function Onboarding({ onDone, startStep=null }) {
               </div>
             )}
 
+            {/* Guía Groq */}
+            {activeProvider==="groq" && (
+              <div style={{display:"flex",flexDirection:"column",gap:12}}>
+                <div style={{fontFamily:MONO,fontSize:9,color:C.green,fontWeight:700,letterSpacing:2}}>
+                  PASO A PASO — GROQ / LLAMA VISION (GRATIS)
+                </div>
+                {[
+                  {n:"1",title:"Abrí Groq Console",
+                   desc:"Entrá y registrate con tu cuenta de Google o con un email — es gratis y no pide tarjeta de crédito.",
+                   btn:<a href="https://console.groq.com/keys" target="_blank" rel="noreferrer"
+                     style={{...S.btn("p",C.green),display:"block",textDecoration:"none",textAlign:"center",fontFamily:MONO,fontSize:12,fontWeight:700}}>
+                     Abrir Groq Console →
+                   </a>},
+                  {n:"2",title:'Tocá "Create API Key"',
+                   desc:'En la sección "API Keys" tocá el botón para crear una key nueva. Ponele un nombre como "SEM Tools".'},
+                  {n:"3",title:"Copiá la key — solo se muestra una vez",
+                   desc:'La key empieza con gsk_... Copiala toda ahora porque no se vuelve a mostrar.'},
+                ].map(({n,title,desc,btn})=>(
+                  <div key={n} style={{display:"flex",gap:12,alignItems:"flex-start"}}>
+                    <div style={{width:28,height:28,borderRadius:"50%",flexShrink:0,
+                      background:`rgba(${rgb(C.green)},0.15)`,border:`2px solid rgba(${rgb(C.green)},0.5)`,
+                      display:"flex",alignItems:"center",justifyContent:"center",
+                      fontFamily:MONO,fontSize:13,fontWeight:700,color:C.green}}>{n}</div>
+                    <div style={{flex:1}}>
+                      <div style={{fontFamily:MONO,fontSize:11,fontWeight:700,color:C.text,marginBottom:3}}>{title}</div>
+                      <div style={{fontFamily:MONO,fontSize:10,color:C.dim,lineHeight:1.7,marginBottom:btn?8:0}}>{desc}</div>
+                      {btn}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
             {/* Guía Claude */}
-            {key.startsWith("sk-") && (
+            {activeProvider==="claude" && (
               <div style={{display:"flex",flexDirection:"column",gap:12}}>
                 <div style={{fontFamily:MONO,fontSize:9,color:C.violet,fontWeight:700,letterSpacing:2}}>
                   PASO A PASO — ANTHROPIC CLAUDE (DE PAGO)
@@ -431,7 +480,7 @@ function Onboarding({ onDone, startStep=null }) {
             {/* Input */}
             <div style={{display:"flex",flexDirection:"column",gap:8}}>
               <input style={{...S.inp,fontSize:12}}
-                placeholder={key.startsWith("sk-")?"sk-ant-api03-...":"AIzaSy... o AQ.Ab8R..."}
+                placeholder={activeProvider==="claude"?"sk-ant-api03-...":activeProvider==="groq"?"gsk_...":"AIzaSy... o AQ.Ab8R..."}
                 value={key} onChange={e=>{setKey(e.target.value);setErr(null);}}/>
               {err&&<div style={{fontFamily:MONO,fontSize:10,color:C.red,lineHeight:1.6,
                 background:`rgba(${rgb(C.red)},0.08)`,borderRadius:8,padding:"8px 12px"}}>{err}</div>}
