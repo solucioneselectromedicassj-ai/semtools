@@ -1,10 +1,11 @@
 import React, { useEffect, useRef } from "react";
+import { C, MONO } from "./shared-core.jsx";
 
 // ── Banner de AdSense ─────────────────────────────────────────────────────────
 // Reemplazá estos dos valores cuando Google AdSense apruebe el sitio
 // (semtools-gilt.vercel.app) y crees el bloque de anuncio "Banner Home".
-// Hasta entonces el componente no renderiza nada (return null) — no rompe
-// nada ni pega a Google con credenciales inválidas.
+// Hasta entonces se muestra un placeholder visual (ver más abajo) en vez del
+// anuncio real — no pega a Google con credenciales inválidas.
 const ADSENSE_CLIENT = "ca-pub-REEMPLAZAR";   // ej: ca-pub-1234567890123456
 const ADSENSE_SLOT_HOME = "REEMPLAZAR";       // ej: 1234567890 (ID del bloque de anuncio)
 
@@ -32,7 +33,15 @@ function AdBanner() {
     catch (_e) {}
   }, [ready]);
 
-  if (!ready) return null;
+  if (!ready) return (
+    <div style={{ margin:"4px 0 2px", padding:"10px 12px", textAlign:"center",
+      borderRadius:8, border:`1px dashed ${C.dim}`, background:"rgba(255,255,255,0.03)",
+      flexShrink:0 }}>
+      <div style={{ fontFamily:MONO, fontSize:9, color:C.dim, letterSpacing:1 }}>
+        ESPACIO PUBLICITARIO — pendiente de aprobación AdSense
+      </div>
+    </div>
+  );
 
   return (
     <div style={{ padding:"6px 0 2px", textAlign:"center", flexShrink:0 }}>
