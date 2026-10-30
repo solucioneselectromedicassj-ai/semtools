@@ -4,6 +4,135 @@ import { CameraView, askClaude } from "./shared-api.jsx";
 import { CalButton, DemoBanner, ModuleGate, TimeChart, getCal, isDemoMode } from "./shared-mods.jsx";
 import { StopFAB } from "./shared-app.jsx";
 
+// ── Toggle de modo IA / offline — reusado por Resistencias e Integrados ──────
+function ModeTab({ active, onClick, label, col }) {
+  return (
+    <button onClick={onClick} style={{
+      flex:1, border:`1px solid ${active?col:C.bord}`, borderRadius:8,
+      padding:"10px 6px", cursor:"pointer", fontFamily:MONO, fontSize:11, fontWeight:700,
+      color:active?col:C.dim, background:active?`rgba(${rgb(col)},0.12)`:"rgba(255,255,255,0.04)",
+    }}>{label}</button>
+  );
+}
+
+// ── Calculadora de código de colores (offline) ───────────────────────────────
+const RES_COLORS = [
+  { id:"black",  name:"Negro",    hex:"#1a1a1a", digit:0, mult:1,          tol:null },
+  { id:"brown",  name:"Marrón",   hex:"#7B3F00", digit:1, mult:10,         tol:1    },
+  { id:"red",    name:"Rojo",     hex:"#E3312E", digit:2, mult:100,        tol:2    },
+  { id:"orange", name:"Naranja",  hex:"#FF8C1A", digit:3, mult:1000,       tol:null },
+  { id:"yellow", name:"Amarillo", hex:"#FFD500", digit:4, mult:10000,      tol:null },
+  { id:"green",  name:"Verde",    hex:"#2E9E3F", digit:5, mult:100000,     tol:0.5  },
+  { id:"blue",   name:"Azul",     hex:"#2962FF", digit:6, mult:1000000,    tol:0.25 },
+  { id:"violet", name:"Violeta",  hex:"#8E24AA", digit:7, mult:10000000,   tol:0.1  },
+  { id:"grey",   name:"Gris",     hex:"#9E9E9E", digit:8, mult:100000000, tol:0.05 },
+  { id:"white",  name:"Blanco",   hex:"#FFFFFF", digit:9, mult:1000000000, tol:null },
+  { id:"gold",   name:"Dorado",   hex:"#D4AF37", digit:null, mult:0.1,     tol:5    },
+  { id:"silver", name:"Plateado", hex:"#C0C0C0", digit:null, mult:0.01,    tol:10   },
+  { id:"none",   name:"Sin banda", hex:null,     digit:null, mult:null,    tol:20   },
+];
+const DIGIT_COLORS = RES_COLORS.filter(c=>c.digit!==null);
+const MULT_COLORS  = RES_COLORS.filter(c=>c.mult!==null);
+const TOL_COLORS   = RES_COLORS.filter(c=>c.tol!==null);
+
+function fmtOhms(v){
+  if(v>=1e6) return +(v/1e6).toFixed(3)+" MΩ";
+  if(v>=1e3) return +(v/1e3).toFixed(3)+" kΩ";
+  return +v.toFixed(3)+" Ω";
+}
+
+function ColorSwatch({ c, active, onClick, col }) {
+  return (
+    <button onClick={onClick} title={c.name} style={{
+      width:36, height:36, borderRadius:8, flexShrink:0,
+      background: c.hex || "repeating-linear-gradient(45deg,#2a2a2a,#2a2a2a 4px,#1a1a1a 4px,#1a1a1a 8px)",
+      border: active ? `3px solid ${col}` : "1px solid rgba(255,255,255,0.2)",
+      boxShadow: active ? `0 0 10px ${col}` : "none", cursor:"pointer",
+    }}/>
+  );
+}
+
+function ColorRow({ label, options, value, onPick, col }) {
+  return (
+    <div>
+      <div style={{fontFamily:MONO,fontSize:9,color:C.dim,marginBottom:4}}>{label}</div>
+      <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+        {options.map(c=>(
+          <ColorSwatch key={c.id} c={c} active={value?.id===c.id} onClick={()=>onPick(c)} col={col}/>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ResistorCalc() {
+  const col=C.violet;
+  const [bands,setBands]=useState(5);
+  const digitCount = bands-2;
+  const [vals,setVals]=useState(Array(5).fill(null));
+
+  useEffect(()=>{ setVals(Array(bands).fill(null)); },[bands]);
+
+  const setAt=(i,c)=>setVals(v=>{ const n=[...v]; n[i]=c; return n; });
+
+  const digits = vals.slice(0,digitCount);
+  const multV  = vals[digitCount];
+  const tolV   = vals[digitCount+1];
+
+  let value=null;
+  if(digits.every(d=>d) && multV && multV.mult!=null){
+    const num = digits.reduce((acc,d)=>acc*10+d.digit,0);
+    value = num*multV.mult;
+  }
+  const tolPct = tolV ? tolV.tol : 20;
+
+  const reset=()=>setVals(Array(bands).fill(null));
+
+  return (
+    <div style={{display:"flex",flexDirection:"column",gap:14}}>
+      <div style={{display:"flex",gap:6}}>
+        {[4,5].map(n=>(
+          <ModeTab key={n} active={bands===n} onClick={()=>setBands(n)} label={`${n} bandas`} col={col}/>
+        ))}
+      </div>
+
+      {/* Vista previa de la resistencia */}
+      <div style={{...S.disp(col),display:"flex",justifyContent:"center",alignItems:"center",padding:"20px 10px",gap:3}}>
+        <div style={{width:26,height:4,background:"#D9B88A",borderRadius:"2px 0 0 2px"}}/>
+        {vals.map((b,i)=>(
+          <div key={i} style={{width:10,height:26,
+            background:b?(b.hex||"repeating-linear-gradient(45deg,#2a2a2a,#2a2a2a 3px,#1a1a1a 3px,#1a1a1a 6px)"):"rgba(255,255,255,0.08)",
+            border:"1px solid rgba(0,0,0,0.3)"}}/>
+        ))}
+        <div style={{width:26,height:4,background:"#D9B88A",borderRadius:"0 2px 2px 0"}}/>
+      </div>
+
+      {Array.from({length:digitCount}).map((_,i)=>(
+        <ColorRow key={i} label={`BANDA ${i+1} (cifra)`} options={DIGIT_COLORS}
+          value={vals[i]} onPick={c=>setAt(i,c)} col={col}/>
+      ))}
+      <ColorRow label="MULTIPLICADOR" options={MULT_COLORS}
+        value={vals[digitCount]} onPick={c=>setAt(digitCount,c)} col={col}/>
+      <ColorRow label="TOLERANCIA" options={TOL_COLORS}
+        value={vals[digitCount+1]} onPick={c=>setAt(digitCount+1,c)} col={col}/>
+
+      {value!==null && (
+        <div style={{...S.disp(C.green),textAlign:"center",padding:"18px"}}>
+          <div style={{fontFamily:MONO,fontSize:42,fontWeight:700,color:C.green,textShadow:`0 0 20px ${C.green}`}}>
+            {fmtOhms(value)}
+          </div>
+          <div style={{fontFamily:MONO,fontSize:13,color:C.dim,marginTop:4}}>± {tolPct}%</div>
+        </div>
+      )}
+      <button style={S.btn("s")} onClick={reset}>↺ Limpiar</button>
+      <div style={S.note}>
+        Calculadora 100% offline — no usa IA ni necesita conexión, funciona siempre.
+        Tocá cada banda en orden, de izquierda a derecha (la banda de tolerancia es la que queda más separada del resto).
+      </div>
+    </div>
+  );
+}
+
 const RESISTENCIA_PROMPT =
   "Sos un técnico electrónico experto leyendo resistencias a partir de una foto tomada con un celular. " +
   "La foto puede tener reflejos, mala luz o ángulo imperfecto. Puede ser una resistencia tradicional con " +
@@ -28,6 +157,7 @@ const RESISTENCIA_PROMPT =
 
 function ToolResistencias() {
   const col=C.violet;
+  const [mode,setMode]=useState("ai"); // "ai" | "manual"
   const [loading,setLoading]=useState(false), [result,setResult]=useState(null);
   const analyze=async b64=>{
     setLoading(true); setResult(null);
@@ -38,15 +168,24 @@ function ToolResistencias() {
   return (
     <div style={S.wrap}>
       <div style={S.st(col)}>▸ Lector de Resistencias</div>
-      <CameraView captureLabel={loading?"Analizando…":"📷 Leer bandas"} onCapture={loading?null:analyze}/>
-      {result&&<div style={S.res(col)}>
-        <div style={{fontFamily:MONO,fontSize:9,color:col,marginBottom:6,fontWeight:700}}>RESULTADO</div>
-        <pre style={{fontFamily:MONO,fontSize:13,color:C.text,whiteSpace:"pre-wrap",margin:0,lineHeight:1.9}}>{result}</pre>
-      </div>}
-      <div style={S.note}>
-        Apuntá la cámara con buena luz y presioná Leer bandas. También podés subir una foto ya tomada.
-        Si usás la key gratis de Gemini: Google tiene un límite diario de usos — si deja de responder, esperá unas horas o probá con otra cuenta de Google.
+      <div style={{display:"flex",gap:6}}>
+        <ModeTab active={mode==="ai"} onClick={()=>setMode("ai")} label="📷 Foto (IA)" col={col}/>
+        <ModeTab active={mode==="manual"} onClick={()=>setMode("manual")} label="🎨 Manual (sin IA)" col={C.green}/>
       </div>
+      {mode==="manual" ? <ResistorCalc/> : (
+        <>
+          <CameraView captureLabel={loading?"Analizando…":"📷 Leer bandas"} onCapture={loading?null:analyze}/>
+          {result&&<div style={S.res(col)}>
+            <div style={{fontFamily:MONO,fontSize:9,color:col,marginBottom:6,fontWeight:700}}>RESULTADO</div>
+            <pre style={{fontFamily:MONO,fontSize:13,color:C.text,whiteSpace:"pre-wrap",margin:0,lineHeight:1.9}}>{result}</pre>
+          </div>}
+          <div style={S.note}>
+            Apuntá la cámara con buena luz y presioná Leer bandas. También podés subir una foto ya tomada.
+            Si usás la key gratis de Gemini: Google tiene un límite diario de usos — si deja de responder, usá
+            "🎨 Manual (sin IA)" arriba, que funciona siempre sin depender de ninguna cuota.
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -58,6 +197,94 @@ function extractField(text, label) {
   const re = new RegExp(label.replace(/[.*+?^${}()|[\]\\]/g,"\\$&") + "\\s*:\\s*(.+)", "i");
   const m = text.match(re);
   return m ? m[1].trim() : null;
+}
+
+// ── Librería local de ICs comunes (offline) ──────────────────────────────────
+const IC_DB = [
+  { names:["7805","L7805","MC7805","LM7805"], cat:"Regulador de voltaje lineal +5V", pkg:"TO-220", pins:"1=IN · 2=GND · 3=OUT", specs:"Vin: 7–25V · Vout: 5V fijo · Imax: 1A (con disipador) · Protección térmica y de corriente incorporada" },
+  { names:["7812","L7812","MC7812"], cat:"Regulador de voltaje lineal +12V", pkg:"TO-220", pins:"1=IN · 2=GND · 3=OUT", specs:"Vin: 14–35V · Vout: 12V fijo · Imax: 1A (con disipador)" },
+  { names:["7809","L7809"], cat:"Regulador de voltaje lineal +9V", pkg:"TO-220", pins:"1=IN · 2=GND · 3=OUT", specs:"Vin: 11–25V · Vout: 9V fijo · Imax: 1A" },
+  { names:["7905","7912"], cat:"Regulador de voltaje lineal negativo", pkg:"TO-220", pins:"1=GND · 2=IN · 3=OUT (orden distinto al 78xx)", specs:"Vout: -5V/-12V según modelo · Imax: 1A" },
+  { names:["LM317","LM317T"], cat:"Regulador de voltaje ajustable", pkg:"TO-220", pins:"1=ADJ · 2=OUT · 3=IN", specs:"Vout ajustable 1.25–37V con 2 resistencias externas · Imax: 1.5A · Vref: 1.25V entre OUT y ADJ" },
+  { names:["LM358","LM358N","LM358P"], cat:"Amplificador operacional doble (dual op-amp)", pkg:"DIP-8 / SOIC-8", pins:"1=OUT1 · 2=IN1- · 3=IN1+ · 4=GND · 5=IN2+ · 6=IN2- · 7=OUT2 · 8=VCC", specs:"Vcc: 3–32V (simple) o ±1.5–±16V (dual) · Uso: amplificación, comparador, sensores" },
+  { names:["LM324","LM324N"], cat:"Amplificador operacional cuádruple", pkg:"DIP-14 / SOIC-14", pins:"VCC=pin4 · GND=pin11 · 4 amp-op internos", specs:"Mismo tipo que LM358 pero con 4 canales en vez de 2" },
+  { names:["TL082","TL072"], cat:"Amplificador operacional dual JFET (bajo ruido)", pkg:"DIP-8", pins:"Mismo pinout que LM358", specs:"Vcc: ±4.5 a ±18V · Uso: audio, filtros activos" },
+  { names:["555","NE555","LM555"], cat:"Temporizador (timer)", pkg:"DIP-8 / SOIC-8", pins:"1=GND · 2=TRIG · 3=OUT · 4=RESET · 5=CTRL · 6=THR · 7=DIS · 8=VCC", specs:"Vcc: 4.5–16V · Modos: astable (oscilador), monoestable (temporizador), biestable · Corriente de salida hasta 200mA" },
+  { names:["556","NE556"], cat:"Doble temporizador 555", pkg:"DIP-14", pins:"2 bloques 555 independientes en un chip", specs:"Mismas specs que el 555, x2" },
+  { names:["4017","CD4017"], cat:"Contador decimal Johnson (divisor/secuenciador)", pkg:"DIP-16", pins:"Salidas Q0-Q9 secuenciales · CLK=14 · RESET=15 · VDD=16 · VSS=8", specs:"Vcc: 3–15V (serie 4000 CMOS) · Uso: luces secuenciales, contadores" },
+  { names:["4511","CD4511"], cat:"Decodificador BCD a 7 segmentos", pkg:"DIP-16", pins:"Entradas BCD A-D · Salidas a-g para display", specs:"Vcc: 3–15V · Controla directamente un display 7 segmentos ánodo común" },
+  { names:["4066","CD4066"], cat:"Switch analógico cuádruple bidireccional", pkg:"DIP-14", pins:"4 switches independientes controlados digitalmente", specs:"Vcc: 3–15V · Uso: multiplexado de señales analógicas" },
+  { names:["4093","CD4093"], cat:"Compuerta NAND cuádruple con Schmitt-trigger", pkg:"DIP-14", pins:"4 compuertas NAND de 2 entradas", specs:"Vcc: 3–15V · Uso: lógica digital, osciladores simples" },
+  { names:["74HC595","SN74HC595"], cat:"Registro de desplazamiento serie-paralelo", pkg:"DIP-16 / SOIC-16", pins:"DS=14 · SHCP=11 · STCP=12 · OE=13 · MR=10 · Q0-Q7 salidas", specs:"Vcc: 2–6V · Uso: expandir salidas digitales (ej. con Arduino)" },
+  { names:["74HC04","SN74HC04"], cat:"Inversor hexagonal (6 compuertas NOT)", pkg:"DIP-14", pins:"6 inversores independientes", specs:"Vcc: 2–6V" },
+  { names:["ULN2003","ULN2003A"], cat:"Driver de 7 transistores Darlington (relés/motores)", pkg:"DIP-16 / SOIC-16", pins:"IN1-7 entradas · OUT1-7 salidas (colector abierto) · COM=pin9 (diodos de protección) · GND=pin8", specs:"Vout max: 50V · Corriente por canal: 500mA · Uso: manejar relés, motores paso a paso, solenoides desde lógica" },
+  { names:["ULN2803","ULN2803A"], cat:"Driver de 8 transistores Darlington", pkg:"DIP-18", pins:"Igual al ULN2003 pero con 8 canales", specs:"Mismas specs que ULN2003, x8 canales" },
+  { names:["L293D"], cat:"Driver doble puente H para motores DC", pkg:"DIP-16", pins:"2 puentes H independientes · EN1=1 · IN1=2 · IN2=7 · OUT1=3 · OUT2=6 · VCC2(motor)=8 · GND=4,5,12,13", specs:"Vcc lógica: 4.5–7V · Vcc motor: hasta 36V · Corriente: 600mA por canal (1.2A pico) · Diodos de protección incorporados" },
+  { names:["L298N","L298"], cat:"Driver doble puente H de alta corriente", pkg:"Multiwatt-15 / módulo", pins:"Similar al L293D, mayor corriente", specs:"Vcc motor: hasta 46V · Corriente: 2A por canal · Requiere disipador" },
+  { names:["ATMEGA328P","ATmega328"], cat:"Microcontrolador AVR 8-bit (base del Arduino Uno)", pkg:"DIP-28 / TQFP-32", pins:"28 pines (DIP) · Varios timers, ADC, UART, SPI, I2C", specs:"Vcc: 1.8–5.5V · Flash: 32KB · RAM: 2KB · Clock: hasta 20MHz" },
+  { names:["ESP32","ESP32-WROOM","ESP32-WROOM-32"], cat:"Microcontrolador WiFi+Bluetooth", pkg:"Módulo SMD", pins:"Variable según módulo — ver pinout específico del fabricante", specs:"Vcc: 3.0–3.6V (NO tolerante a 5V en la mayoría de pines) · WiFi 802.11 b/g/n · Bluetooth 4.2/BLE · Dual core hasta 240MHz" },
+  { names:["ESP8266","ESP-01"], cat:"Microcontrolador WiFi", pkg:"Módulo SMD", pins:"Variable según módulo", specs:"Vcc: 3.0–3.6V (NO tolerante a 5V) · WiFi 802.11 b/g/n · 1 core hasta 160MHz" },
+  { names:["CH340","CH340G"], cat:"Conversor USB a serial (UART)", pkg:"SOIC-16", pins:"USB D+/D- · TXD · RXD · VCC · GND", specs:"Vcc: 3.3–5.5V · Usado en placas Arduino clones y programadores" },
+  { names:["CP2102"], cat:"Conversor USB a serial (UART)", pkg:"QFN-28", pins:"Similar al CH340, distinto fabricante (Silicon Labs)", specs:"Vcc: 3.0–3.6V · Requiere driver específico en Windows" },
+  { names:["FT232RL"], cat:"Conversor USB a serial (UART), alta calidad", pkg:"SSOP-28", pins:"USB + UART + control de flujo", specs:"Vcc: 3.3–5.25V · Más confiable que CH340, más caro" },
+  { names:["24C32","AT24C32","24LC32"], cat:"Memoria EEPROM I2C 32Kbit", pkg:"DIP-8 / SOIC-8", pins:"SDA=5 · SCL=6 · WP=7 · A0-A2=1,2,3 (dirección) · VCC=8 · GND=4", specs:"Vcc: 1.8–5.5V · Retención de datos: >100 años · Ciclos de escritura: >1 millón" },
+  { names:["PC817","4N25","4N35"], cat:"Optoacoplador (aislamiento galvánico)", pkg:"DIP-4", pins:"1,2=LED (ánodo/cátodo) · 3,4=fototransistor (emisor/colector)", specs:"Aislamiento: 2500–5000Vrms · Uso: aislar circuitos de distinto voltaje/tierra" },
+  { names:["MAX232","MAX232CPE"], cat:"Conversor de niveles RS232 a TTL", pkg:"DIP-16", pins:"Requiere 4 capacitores externos (1µF típico)", specs:"Vcc: 5V · Convierte ±12V RS232 a 0-5V TTL para comunicación serie con PC" },
+  { names:["IRF540","IRF540N"], cat:"MOSFET canal N de potencia", pkg:"TO-220", pins:"1=Gate · 2=Drain · 3=Source", specs:"Vds max: 100V · Id max: 33A · Uso: switching de cargas, control PWM de motores/LEDs" },
+  { names:["IRFZ44N"], cat:"MOSFET canal N de potencia (logic level)", pkg:"TO-220", pins:"1=Gate · 2=Drain · 3=Source", specs:"Vds max: 55V · Id max: 49A · Se activa bien con 5V de gate (logic level)" },
+  { names:["BC547","BC548","BC337"], cat:"Transistor NPN de uso general", pkg:"TO-92", pins:"1=Colector · 2=Base · 3=Emisor (puede variar, verificar datasheet del fabricante)", specs:"Vce max: 45–50V · Ic max: 100mA–800mA según modelo · Uso: amplificación de señal, switching de baja potencia" },
+  { names:["BC557","BC327"], cat:"Transistor PNP de uso general", pkg:"TO-92", pins:"Complementario de BC547/BC337", specs:"Mismas specs que su par NPN, polaridad invertida" },
+  { names:["TIP120","TIP122"], cat:"Transistor Darlington NPN de potencia", pkg:"TO-220", pins:"1=Base · 2=Colector · 3=Emisor", specs:"Vce max: 60–100V · Ic max: 5A · Ganancia muy alta (Darlington) · Uso: control de motores/relés desde un microcontrolador" },
+  { names:["1N4001","1N4007"], cat:"Diodo rectificador", pkg:"DO-41 (axial)", pins:"Banda = cátodo", specs:"1N4001: 50V/1A · 1N4007: 1000V/1A · Uso: rectificación, protección contra inversión de polaridad" },
+  { names:["1N4148"], cat:"Diodo de señal (conmutación rápida)", pkg:"DO-35 (axial)", pins:"Banda = cátodo", specs:"Vr max: 100V · If max: 200mA · Uso: lógica, protección de pines, detección" },
+  { names:["1N5819"], cat:"Diodo Schottky", pkg:"DO-41 (axial)", pins:"Banda = cátodo", specs:"Vr: 40V · If: 1A · Caída de voltaje muy baja (~0.3–0.5V) · Uso: rectificación eficiente, protección de polaridad en fuentes" },
+];
+
+function icMatches(entry, q) {
+  const ql = q.toLowerCase().replace(/[^a-z0-9]/g,"");
+  if (entry.names.some(n=>n.toLowerCase().replace(/[^a-z0-9]/g,"").includes(ql))) return true;
+  return entry.cat.toLowerCase().includes(q.toLowerCase());
+}
+
+function ICLibrary() {
+  const col=C.violet;
+  const [q,setQ]=useState("");
+  const query=q.trim();
+  const results = query.length<2 ? [] : IC_DB.filter(e=>icMatches(e,query)).slice(0,12);
+
+  return (
+    <div style={{display:"flex",flexDirection:"column",gap:12}}>
+      <input style={S.inp} placeholder="Escribí el part number (ej: LM358, 7805, 555...)"
+        value={q} onChange={e=>setQ(e.target.value)}/>
+      {query.length>=2 && results.length===0 && (
+        <div style={{...S.note,textAlign:"center"}}>
+          No está en la librería local ({IC_DB.length} componentes). Probá "📷 Foto (IA)" o buscá el marking directo en Google.
+        </div>
+      )}
+      {results.map((e,i)=>(
+        <div key={i} style={S.res(col)}>
+          <div style={{fontFamily:MONO,fontSize:14,fontWeight:700,color:col,marginBottom:4}}>
+            {e.names[0]}
+            {e.names.length>1 && <span style={{fontSize:10,color:C.dim,fontWeight:400}}> · {e.names.slice(1).join(", ")}</span>}
+          </div>
+          <div style={{fontFamily:MONO,fontSize:11,color:C.text,marginBottom:6}}>{e.cat}</div>
+          <div style={{fontFamily:MONO,fontSize:10,color:C.dim,lineHeight:1.8}}>
+            <div><span style={{color:col}}>Encapsulado: </span>{e.pkg}</div>
+            <div><span style={{color:col}}>Pines: </span>{e.pins}</div>
+            <div><span style={{color:col}}>Specs: </span>{e.specs}</div>
+          </div>
+          <a href={`https://www.google.com/search?q=${encodeURIComponent(e.names[0])}+datasheet+pdf`} target="_blank" rel="noreferrer"
+            style={{...S.btn("s"),textDecoration:"none",display:"block",textAlign:"center",marginTop:8,fontSize:11}}>
+            📄 Buscar datasheet
+          </a>
+        </div>
+      ))}
+      <div style={S.note}>
+        Librería offline de los {IC_DB.length} componentes más comunes en taller — no usa IA ni necesita conexión, funciona siempre.
+        Si no encontrás el tuyo acá, probá "📷 Foto (IA)".
+      </div>
+    </div>
+  );
 }
 
 const INTEGRADO_PROMPT =
@@ -99,6 +326,7 @@ function buildIntegradoLinks(text) {
 
 function ToolIntegrado() {
   const col=C.violet;
+  const [mode,setMode]=useState("ai"); // "ai" | "lib"
   const [loading,setLoading]=useState(false), [result,setResult]=useState(null);
   const [photo,setPhoto]=useState(null), [links,setLinks]=useState(null);
   const analyze=async b64=>{
@@ -114,39 +342,48 @@ function ToolIntegrado() {
   return (
     <div style={S.wrap}>
       <div style={S.st(col)}>▸ Identificador de IC</div>
-      <CameraView captureLabel={loading?"Identificando…":"📷 Identificar IC"} onCapture={loading?null:analyze}/>
-      {photo && (
-        <div style={{display:"flex",gap:10,alignItems:"flex-start"}}>
-          <img src={photo} alt="Foto enviada a la IA" style={{width:92,borderRadius:8,border:`1px solid rgba(${rgb(col)},0.3)`,flexShrink:0}}/>
-          <div style={{fontFamily:MONO,fontSize:9,color:C.dim,lineHeight:1.7}}>
-            Esta es la foto que se envió a la IA. Si el marking salió borroso, con reflejo o muy chico, acercá más la cámara, mejorá la luz y volvé a capturar.
-          </div>
-        </div>
-      )}
-      {result&&<div style={S.res(col)}>
-        <pre style={{fontFamily:MONO,fontSize:12,color:C.text,whiteSpace:"pre-wrap",margin:0,lineHeight:1.9}}>{result}</pre>
-      </div>}
-      {links && (
-        <div style={{display:"flex",flexDirection:"column",gap:8}}>
-          <a href={links.datasheet} target="_blank" rel="noreferrer"
-            style={{...S.btn("s"),textDecoration:"none",display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
-            📄 Buscar datasheet
-          </a>
-          <a href={links.pinout} target="_blank" rel="noreferrer"
-            style={{...S.btn("s"),textDecoration:"none",display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
-            🖼 Ver diagrama de conexión / pines
-          </a>
-          <a href={links.octopart} target="_blank" rel="noreferrer"
-            style={{...S.btn("s"),textDecoration:"none",display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
-            🔍 Buscar en Octopart
-          </a>
-        </div>
-      )}
-      <div style={S.note}>
-        Enfocá bien de cerca el marking, con buena luz y sin reflejos — eso es lo que más mejora el resultado.
-        Si la IA no está segura te lo va a decir en CONFIANZA; usá los enlaces de arriba para confirmar con el datasheet real antes de dar el componente por bueno.
-        Si usás la key gratis de Gemini: Google tiene un límite diario de usos — si deja de responder, esperá unas horas o probá con otra cuenta de Google.
+      <div style={{display:"flex",gap:6}}>
+        <ModeTab active={mode==="ai"} onClick={()=>setMode("ai")} label="📷 Foto (IA)" col={col}/>
+        <ModeTab active={mode==="lib"} onClick={()=>setMode("lib")} label="🔍 Librería (sin IA)" col={C.green}/>
       </div>
+      {mode==="lib" ? <ICLibrary/> : (
+        <>
+          <CameraView captureLabel={loading?"Identificando…":"📷 Identificar IC"} onCapture={loading?null:analyze}/>
+          {photo && (
+            <div style={{display:"flex",gap:10,alignItems:"flex-start"}}>
+              <img src={photo} alt="Foto enviada a la IA" style={{width:92,borderRadius:8,border:`1px solid rgba(${rgb(col)},0.3)`,flexShrink:0}}/>
+              <div style={{fontFamily:MONO,fontSize:9,color:C.dim,lineHeight:1.7}}>
+                Esta es la foto que se envió a la IA. Si el marking salió borroso, con reflejo o muy chico, acercá más la cámara, mejorá la luz y volvé a capturar.
+              </div>
+            </div>
+          )}
+          {result&&<div style={S.res(col)}>
+            <pre style={{fontFamily:MONO,fontSize:12,color:C.text,whiteSpace:"pre-wrap",margin:0,lineHeight:1.9}}>{result}</pre>
+          </div>}
+          {links && (
+            <div style={{display:"flex",flexDirection:"column",gap:8}}>
+              <a href={links.datasheet} target="_blank" rel="noreferrer"
+                style={{...S.btn("s"),textDecoration:"none",display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
+                📄 Buscar datasheet
+              </a>
+              <a href={links.pinout} target="_blank" rel="noreferrer"
+                style={{...S.btn("s"),textDecoration:"none",display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
+                🖼 Ver diagrama de conexión / pines
+              </a>
+              <a href={links.octopart} target="_blank" rel="noreferrer"
+                style={{...S.btn("s"),textDecoration:"none",display:"flex",alignItems:"center",justifyContent:"center",gap:8}}>
+                🔍 Buscar en Octopart
+              </a>
+            </div>
+          )}
+          <div style={S.note}>
+            Enfocá bien de cerca el marking, con buena luz y sin reflejos — eso es lo que más mejora el resultado.
+            Si la IA no está segura te lo va a decir en CONFIANZA; usá los enlaces de arriba para confirmar con el datasheet real antes de dar el componente por bueno.
+            Si usás la key gratis de Gemini: Google tiene un límite diario de usos — si deja de responder, usá
+            "🔍 Librería (sin IA)" arriba, que funciona siempre sin depender de ninguna cuota.
+          </div>
+        </>
+      )}
     </div>
   );
 }
