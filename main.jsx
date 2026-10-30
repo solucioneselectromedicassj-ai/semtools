@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from "react";
 import ReactDOM from "react-dom/client";
 import { BLOCKS, C, MONO, S, SVG_PATHS, TOOL, ToolIcon, VERSION, rgb } from "./shared-core.jsx";
 import { Onboarding } from "./shared-api.jsx";
+import { AdBanner } from "./ads.jsx";
 import { ErrorBoundary, ModulePlaceholder, TOOL_NEEDS } from "./shared-app.jsx";
 import { ToolDistancia, ToolIntegrado, ToolJackSensor, ToolResistencias } from "./tools-1.jsx";
 import { ToolDecibeles, ToolNivel } from "./tools-2.jsx";
@@ -257,6 +258,7 @@ function App() {
       <div style={S.body}>
         {tool===null?<ErrorBoundary key="home"><Home onSel={setTool} caps={caps}/></ErrorBoundary>:<ErrorBoundary key={tool}>{getView(tool)}</ErrorBoundary>}
       </div>
+      {tool===null&&!showOnboard&&<AdBanner/>}
       <div style={S.nav}>
         <button style={S.nb(tool===null,C.amber)} onClick={()=>setTool(null)}>
           <span style={{fontSize:18}}>⊞</span>
